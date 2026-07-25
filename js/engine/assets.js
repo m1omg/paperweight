@@ -93,7 +93,18 @@ PW.assets = (function () {
         var img = new Image();
         img.onload = function () {
           images[name] = img;
-          step(name);
+          /* `load` only promises the bytes arrived, not that they have been
+             turned into pixels. A room background is a million-odd pixels, and
+             decoding one the first time it is painted stalls that frame long
+             enough to be seen as a hitch on the way through a door. decode()
+             does the work now, off the main thread, while the loading bar is
+             still on screen. */
+          if (img.decode) {
+            img.decode().then(function () { step(name); },
+                              function () { step(name); });
+          } else {
+            step(name);
+          }
         };
         img.onerror = function () { step(name); };
         img.src = src;

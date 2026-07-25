@@ -49,7 +49,10 @@ async function main() {
   const chrome = spawn(CHROME, [
     '--headless=new', '--remote-debugging-port=' + PORT,
     '--user-data-dir=' + profile, '--no-first-run', '--no-sandbox',
-    '--window-size=1280,760', '--hide-scrollbars',
+    // A real desktop screen, so the shots show what the canvas actually
+    // renders at device resolution rather than a blown-up 960x540.
+    '--window-size=2560,1440', '--force-device-scale-factor=1',
+    '--hide-scrollbars',
     '--autoplay-policy=no-user-gesture-required',
     '--allow-file-access-from-files',
     'file://' + path.join(ROOT, 'index.html')
@@ -67,6 +70,7 @@ async function main() {
   let id = 0;
   const waiting = new Map();
   const logs = [];
+  let blank = 0;
 
   ws.addEventListener('message', (ev) => {
     const m = JSON.parse(ev.data);
@@ -106,10 +110,56 @@ async function main() {
     await sleep(28);
   }
 
+  /* Wait for the game to say it is ready rather than guessing with sleeps.
+     Sleeps were tuned on a smaller canvas and quietly stopped being long
+     enough when the artwork grew, so every shot came out as the black
+     transition veil and nothing said so. */
+  async function until(expr, ms = 8000, label = expr) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      if (await evaluate('!!(' + expr + ')')) return true;
+      await sleep(90);
+    }
+    console.log('  (timed out waiting for ' + label + ')');
+    return false;
+  }
+
+  /** No veil, no flash, nothing animating: safe to photograph. */
+  const settled = () => until('!PW.game.busy()', 8000, 'the screen to settle');
+
+  /** Press Z until the running script lets go of the stage. */
+  async function advance(ms = 12000) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      const sc = await evaluate(
+        'JSON.stringify([!!(PW.game.top().script && PW.game.top().script.running),' +
+        ' PW.game.busy()])');
+      const [running, busy] = JSON.parse(sc);
+      if (!running && !busy) return true;
+      await key('KeyZ');
+      await sleep(140);
+    }
+    console.log('  (timed out advancing the script)');
+    return false;
+  }
+
   async function shot(name) {
+    await settled();
     const data = await evaluate("document.getElementById('screen').toDataURL('image/png')");
     fs.writeFileSync(path.join(OUT, name + '.png'), Buffer.from(data.split(',')[1], 'base64'));
-    console.log('  ' + name + '.png');
+    // A frame that is one flat colour is the veil, not a picture of the game.
+    const flat = await evaluate(`(function(){
+      var c = document.getElementById('screen');
+      var g = c.getContext('2d');
+      var d = g.getImageData(0, 0, c.width, c.height).data;
+      var r0 = d[0], g0 = d[1], b0 = d[2];
+      for (var i = 0; i < d.length; i += 4 * 997) {
+        if (Math.abs(d[i]-r0) + Math.abs(d[i+1]-g0) + Math.abs(d[i+2]-b0) > 12) return false;
+      }
+      return true;
+    })()`);
+    blank += flat ? 1 : 0;
+    console.log('  ' + name + '.png' + (flat ? '   <-- BLANK' : ''));
   }
 
   await send('Runtime.enable');
@@ -122,9 +172,11 @@ async function main() {
   console.log('capturing:');
   await shot('01-title');
 
-  // Start a new game and skip the prologue with the debug hooks.
-  await key('KeyZ'); await sleep(500);
-  await key('KeyZ'); await sleep(2500);
+  // Start a new game, then hold Z until the prologue hands back control.
+  await key('KeyZ'); await sleep(400);
+  await key('KeyZ');
+  await until("PW.game.top().name === 'field'", 12000, 'the bedroom');
+  await advance();
   await shot('02-bedroom');
 
   await evaluate(`(function(){
@@ -133,38 +185,35 @@ async function main() {
     PWdebug.give('crown'); PWdebug.give('jam', 3); PWdebug.give('marble');
     PWdebug.room('hub','start');
   })()`);
-  await sleep(2200);
   await shot('03-hall-of-doors');
 
   await evaluate("PWdebug.room('kitchen','start')");
-  await sleep(2000);
   await shot('04-kitchen');
 
   await evaluate("PWdebug.join('hal'); PWdebug.room('garden','start')");
-  await sleep(2000);
   await shot('05-garden');
 
   await evaluate("PWdebug.room('attic','start')");
-  await sleep(2000);
   await shot('06-attic');
 
   await evaluate("PWdebug.room('finalroom','start')");
-  await sleep(2000);
   await shot('07-her-room');
 
   // Dialogue with a portrait.
   await evaluate(`PW.game.top().script.run([
     ['say','wick','warm','You are allowed to keep a thing and put a thing down. They are not opposites.']
   ])`);
-  await sleep(2600);
+  await until('PW.game.top().box && PW.game.top().box.active', 6000, 'the dialogue box');
+  await sleep(900);
   await shot('08-dialogue');
   await key('KeyZ'); await sleep(400); await key('KeyZ'); await sleep(600);
 
   // A battle, mid-menu.
   await evaluate("PWdebug.battle('kitchen_c')");
-  await sleep(2600);
+  await until("PW.game.top().name === 'battle'", 8000, 'the battle');
+  await sleep(1000);
   await shot('09-battle-intro');
-  await key('KeyZ'); await sleep(900);
+  await until("PW.game.top().state === 'input'", 9000, 'the command menu');
   await shot('10-battle-menu');
 
   // Open the skill list.
@@ -193,7 +242,8 @@ async function main() {
 
   // An ending and the credits.
   await evaluate("PWdebug.ending('keep_going')");
-  await sleep(3600);
+  await until("PW.game.top().name === 'ending'", 8000, 'the ending');
+  await sleep(1800);
   await shot('17-ending');
   for (let i = 0; i < 30; i++) { await key('KeyZ'); await sleep(120); }
   await sleep(1200);
@@ -201,9 +251,17 @@ async function main() {
 
   const missing = await evaluate('PW.assets.missing().length');
   const audio = await evaluate('PW.audio.ok() && PW.audio.current()');
-  console.log('\nmissing assets: ' + missing);
+  // The canvas must be backed by real device pixels, not stretched from 960.
+  const backing = await evaluate(
+    'JSON.stringify([screen.width, screen.height, screen.clientWidth])'
+      .replace(/screen/g, 'document.getElementById("screen")'));
+  const [bw, bh, cw] = JSON.parse(backing);
+  console.log('\ncanvas: ' + bw + 'x' + bh + ' backing for ' + cw + 'px on screen' +
+              (bw > 960 ? '' : '   <-- NOT scaling to the display'));
+  console.log('missing assets: ' + missing);
   console.log('audio running, current track: ' + audio);
   const bad = logs.filter((l) => /error|EXCEPTION/i.test(l));
+  console.log('blank frames: ' + blank);
   console.log('console errors: ' + bad.length);
   bad.slice(0, 10).forEach((l) => console.log('  ' + l));
   logs.filter((l) => /PAPERWEIGHT/.test(l)).forEach((l) => console.log('  ' + l));

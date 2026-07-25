@@ -114,14 +114,28 @@ js/scenes/            scene (dialogue + cutscene runner) · title · field
 tools/                the asset pipeline and the tests
 assets/_raw/          the untouched GPT Image 2 output (masters)
 assets/_lossless/     full-quality PNGs of every finished asset
-assets/               83 images (15 JPEG rooms, 68 PNG cut-outs) — 4.6 MB
+assets/               83 images (15 JPEG rooms, 68 PNG cut-outs) — 7.4 MB
 ```
 
-**Rendering** is a single 960×540 canvas scaled to fit the window. There is no
-pixel art: backgrounds are full-frame paintings, characters are cut-out sprites
-that scale with their y position so the far end of a room reads as further away,
-and every panel and every letter of UI text is drawn with a small, *stable*
-per-glyph wobble so it looks hand-lettered rather than typeset.
+**Rendering** is a single canvas. The game draws in a fixed 960×540, but that
+is a coordinate system, not a resolution: the canvas is backed by as many real
+device pixels as the display has (up to 3×), so the text, panels and bars come
+out at the screen's own sharpness instead of being blown up from 960 wide. The
+paintings ship at 1536×864, which is what the model actually drew, cropped to
+the screen's shape and no further.
+
+There is no pixel art: backgrounds are full-frame paintings, characters are
+cut-out sprites that scale with their y position so the far end of a room reads
+as further away, and every panel and every letter of UI text is drawn with a
+small, *stable* per-glyph wobble so it looks hand-lettered rather than typeset.
+
+**Interaction** is judged from where the player is standing, not from a probe
+point in front of them: anything within arm's reach that lies in the direction
+they face is a candidate, and whichever they face most squarely wins. The rooms
+were painted rather than laid out to a plan, so every interaction box was
+measured against its picture — `python3 tools/boxes.py` draws the boxes, the
+walkable floor and the spawn points back over the art so a mismatch is obvious
+at a glance.
 
 **Audio** is entirely synthesised. Eight instruments (felt piano, music box,
 pad, breathy voice, sub bass, pluck, brushed percussion, drone) are built from
@@ -177,11 +191,12 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 ### The tests
 
 ```
-node tools/smoke.js           # 58 checks: data sanity + a full playthrough
+node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
 node tools/paths.js           # 24 checks: endings, every skill, every item
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
+python3 tools/boxes.py        # every room's boxes drawn over its painting
 ```
 
 `smoke.js` loads every source file into a fake DOM and drives the real scenes

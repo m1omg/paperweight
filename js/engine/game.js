@@ -14,12 +14,35 @@ PW.game = (function () {
   var flashes = [];
   var toasts = [];
 
+  /* The game is written in a fixed 960x540, but that is a coordinate system,
+     not a resolution. The canvas is backed by as many real device pixels as
+     the screen has, and everything drawn — the hand-lettered text, the wobbly
+     panels, the bars — comes out at the display's own sharpness instead of
+     being blown up from 960 wide. Only the transform changes, so no scene has
+     to know about any of this.
+
+     Capped at 3x: past that the extra pixels cost fill rate and buy nothing. */
+  var MAX_SCALE = 3;
+  var scale = 1;
+
   function fit() {
-    var pad = 0;
-    var aw = window.innerWidth - pad, ah = window.innerHeight - pad;
-    var s = Math.min(aw / PW.W, ah / PW.H);
-    canvas.style.width = Math.floor(PW.W * s) + 'px';
-    canvas.style.height = Math.floor(PW.H * s) + 'px';
+    var s = Math.min(window.innerWidth / PW.W, window.innerHeight / PW.H);
+    var cssW = Math.floor(PW.W * s), cssH = Math.floor(PW.H * s);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+
+    var dpr = window.devicePixelRatio || 1;
+    scale = Math.min(MAX_SCALE, (cssW * dpr) / PW.W);
+    var bw = Math.round(PW.W * scale), bh = Math.round(PW.H * scale);
+    if (canvas.width === bw && canvas.height === bh) return;
+
+    // Resizing the backing store resets every context setting, so they are
+    // re-applied here rather than once at boot.
+    canvas.width = bw;
+    canvas.height = bh;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.textBaseline = 'top';
   }
 
   function frame(now) {
@@ -88,6 +111,10 @@ PW.game = (function () {
   }
 
   function render() {
+    // One transform maps the game's 960x540 onto however many device pixels
+    // the canvas actually has. Set fresh each frame so a resize mid-frame, or
+    // a scene that leaves the context dirty, cannot smear the next one.
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.save();
     ctx.clearRect(0, 0, PW.W, PW.H);
 
@@ -175,9 +202,6 @@ PW.game = (function () {
     boot: function (onReady) {
       canvas = document.getElementById('screen');
       ctx = canvas.getContext('2d', { alpha: false });
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.textBaseline = 'top';
       fit();
       window.addEventListener('resize', fit);
       window.addEventListener('orientationchange', fit);

@@ -24,6 +24,8 @@ function fakeCanvasCtx() {
   const ctx = {
     canvas: { width: 960, height: 540 },
     save: noop, restore: noop, translate: noop, rotate: noop, scale: noop,
+    setTransform: noop, resetTransform: noop,
+    getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
     clearRect: noop, fillRect: noop, strokeRect: noop,
     beginPath: noop, closePath: noop, moveTo: noop, lineTo: noop,
     quadraticCurveTo: noop, arc: noop, arcTo: noop, ellipse: noop,

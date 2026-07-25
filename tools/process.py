@@ -27,22 +27,35 @@ RAW = os.path.join(ROOT, "assets", "_raw")
 sys.path.insert(0, HERE)
 from manifest import ASSETS, BY_NAME  # noqa: E402
 
-SCREEN = (960, 540)
+# The game draws in a fixed 960x540, but that is a coordinate system: the canvas
+# is backed by real device pixels, so on a 1440p screen a room fills about
+# 2560x1440 of them. Art shipped at 960 wide was therefore being blown up nearly
+# three times. These sizes are what the model actually drew — 1536x1024 for the
+# rooms — cropped to the screen's shape and no further.
+SCREEN = (1536, 864)
+# Battle backdrops sit behind a full screen of interface and are dimmed, so they
+# are the one place where fewer pixels genuinely do not show.
+BATTLE_SCREEN = (1280, 720)
 
 # Room art is opaque and painterly, so JPEG costs nothing visible and saves ~6x.
 # Everything with an alpha channel stays PNG, quantised to 255 colours — on this
 # kind of soft-pencil artwork the difference is invisible and the files are ~4x
 # smaller. Both matter: the game loads 85 images before it can start.
-BG_QUALITY = 88
+# Quality trades down a little as resolution goes up: at 1536 wide the artefacts
+# are smaller than the paper grain they sit on.
+BG_QUALITY = 84
 PNG_COLOURS = 255
 
-# where each family of asset ends up, and how big it may be
+# Where each family of asset ends up, and how big it may be. The cut-out sizes
+# are set by how large each is actually drawn at 3x device scale — a portrait
+# fills 168 game pixels, a boss up to 330 — so nothing is stored bigger than it
+# will ever be seen.
 OUT = {
     "bg": ("bg", None),
     "bb": ("battlebg", None),
-    "por": ("chars", 384),
-    "spr": ("chars", 330),
-    "en": ("enemies", 660),
+    "por": ("chars", 440),
+    "spr": ("chars", 420),
+    "en": ("enemies", 860),
     "ui": ("ui", 300),
 }
 UI_SIZE = {"ui_items": 132, "ui_moods": 132, "ui_paperweight": 420}
@@ -218,9 +231,10 @@ def process(spec):
     d = out_dir(name)
 
     if kind == "bg":
+        size = BATTLE_SCREEN if name.startswith("bb_") else SCREEN
         out = os.path.join(d, name + (".png" if LOSSLESS else ".jpg"))
-        save_flat(cover(img.convert("RGB"), SCREEN), out)
-        return f"  {os.path.basename(out)} -> {SCREEN[0]}x{SCREEN[1]}  " \
+        save_flat(cover(img.convert("RGB"), size), out)
+        return f"  {os.path.basename(out)} -> {size[0]}x{size[1]}  " \
                f"{os.path.getsize(out) // 1024}k"
 
     if kind == "sheet":
