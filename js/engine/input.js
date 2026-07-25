@@ -85,6 +85,8 @@ PW.input = (function () {
 
   var g = null;        // the gesture in progress
   var touched = false; // has this device ever been touched at all?
+  var tapAt = null;    // where a tap landed this frame, in game coordinates
+  var screen = null;
 
   var TAP_KEY = { 1: 'ok', 2: 'back', 3: 'menu' };
 
@@ -99,6 +101,19 @@ PW.input = (function () {
   function overUI(e) {
     var el = e.target;
     return !!(el && el.closest && el.closest('#boot, #fs'));
+  }
+
+  /* Screen pixels -> the 960x540 the game draws in, so a tap can be matched
+     against the boxes the menus declared while drawing. */
+  function toGame(cx, cy) {
+    if (!screen && typeof document !== 'undefined') screen = document.getElementById('screen');
+    if (!screen || !screen.getBoundingClientRect) return null;
+    var r = screen.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    return {
+      x: (cx - r.left) / r.width * PW.W,
+      y: (cy - r.top) / r.height * PW.H
+    };
   }
 
   function findTouch(list, id) {
@@ -175,7 +190,10 @@ PW.input = (function () {
     if (e.touches.length > 0) return;      // wait for every finger to lift
 
     if (!g.moved && now() - g.t0 < TAP_MS) {
-      vtap(TAP_KEY[Math.min(g.fingers, 3)] || 'ok');
+      var n = Math.min(g.fingers, 3);
+      vtap(TAP_KEY[n] || 'ok');
+      // Only a single finger aims at something; two and three are gestures.
+      if (n === 1) tapAt = toGame(g.ox, g.oy);
     }
     steer(0, 0);
     g = null;
@@ -217,6 +235,9 @@ PW.input = (function () {
     axisX: function () { return (down.right ? 1 : 0) - (down.left ? 1 : 0); },
     axisY: function () { return (down.down ? 1 : 0) - (down.up ? 1 : 0); },
 
+    /** Where a one-finger tap landed this frame, in game coordinates. */
+    tap: function () { return tapAt; },
+
     /** Has this device been touched? Used to label the on-screen help. */
     touched: function () { return touched; },
 
@@ -239,9 +260,10 @@ PW.input = (function () {
       }
       pressed = {};
       released = {};
+      tapAt = null;
     },
 
     /** Drop any queued edges — used when scenes swap so a keypress isn't eaten twice. */
-    flush: function () { pressed = {}; released = {}; }
+    flush: function () { pressed = {}; released = {}; tapAt = null; }
   };
 })();

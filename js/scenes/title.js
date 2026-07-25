@@ -39,6 +39,11 @@ PW.TitleScene.prototype = {
     var n = this.opts.length;
     if (PW.input.rep('up')) { this.idx = (this.idx + n - 1) % n; PW.audio.sfx('cursor'); }
     if (PW.input.rep('down')) { this.idx = (this.idx + 1) % n; PW.audio.sfx('cursor'); }
+
+    var t = PW.ui.tapped('title');
+    if (t === 'miss') return;
+    if (t) this.idx = t.idx;
+
     if (!PW.input.hit('ok')) return;
     PW.audio.sfx('confirm');
     var pick = this.opts[this.idx];
@@ -53,6 +58,11 @@ PW.TitleScene.prototype = {
     if (PW.input.rep('up')) { this.idx = (this.idx + n - 1) % n; PW.audio.sfx('cursor'); }
     if (PW.input.rep('down')) { this.idx = (this.idx + 1) % n; PW.audio.sfx('cursor'); }
     if (PW.input.hit('back')) { PW.audio.sfx('cancel'); this.mode = 'title'; this.idx = 0; return; }
+
+    var t = PW.ui.tapped('slot');
+    if (t === 'miss') return;
+    if (t) this.idx = t.idx;
+
     if (!PW.input.hit('ok')) return;
 
     var slot = this.idx;
@@ -139,6 +149,8 @@ PW.TitleScene.prototype = {
     for (var i = 0; i < this.opts.length; i++) {
       var sel = i === this.idx;
       var y = 258 + i * 46;
+      // A generous box: a fingertip is a lot blunter than a mouse pointer.
+      PW.ui.region('title', i, 100, y - 10, 340, 46);
       if (sel) {
         var w = D.measure(ctx, this.opts[i], 26) + 56;
         D.panel(ctx, 112, y - 6, w, 40, {
@@ -163,6 +175,7 @@ PW.TitleScene.prototype = {
       var s = this.slots[i];
       var sel = i === this.idx;
       var sy = y + i * 74;
+      PW.ui.region('slot', i, x, sy, w, 64);
       D.panel(ctx, x, sy, w, 64, {
         fill: sel ? 'rgba(246,231,196,.94)' : 'rgba(26,22,40,.86)',
         stroke: sel ? '#3a3050' : 'rgba(200,186,217,.4)',
@@ -204,7 +217,7 @@ PW.TitleScene.prototype = {
     D.textBlock(ctx, text, x + 30, y + 26, w - 60, {
       size: 18, color: '#ddd2c2', lineHeight: 26, shadow: false
     });
-    D.text(ctx, 'press Z', PW.W / 2, y + h - 42, {
+    D.text(ctx, PW.input.touchCapable() ? 'tap to go back' : 'press Z', PW.W / 2, y + h - 42, {
       size: 16, align: 'center', color: '#8d86a6', shadow: false
     });
   }

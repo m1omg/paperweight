@@ -340,6 +340,10 @@ PW.BattleScene.prototype = {
     var opts = this.rootOptions(m);
     this.moveIdx(menu, opts.length, true);
 
+    var tapped = PW.ui.tapped('cmd');
+    if (tapped === 'miss') return;
+    if (tapped) menu.idx = tapped.idx;
+
     if (PW.input.hit('back')) {
       PW.audio.sfx('cancel');
       // step back to the previous member and re-do their order
@@ -353,7 +357,7 @@ PW.BattleScene.prototype = {
       return;
     }
 
-    if (!PW.input.hit('ok')) return;
+    if (!PW.input.hit('ok') && !tapped) return;
     var key = opts[menu.idx].key;
     PW.audio.sfx('confirm');
 
@@ -391,12 +395,16 @@ PW.BattleScene.prototype = {
     if (!list.length) { this.menu = { level: 'root', idx: 0 }; return; }
     this.moveIdx(menu, list.length, true);
 
+    var tapped = PW.ui.tapped('row');
+    if (tapped === 'miss') return;
+    if (tapped) menu.idx = tapped.idx;
+
     if (PW.input.hit('back')) {
       PW.audio.sfx('cancel');
       this.menu = { level: 'root', idx: 1 };
       return;
     }
-    if (!PW.input.hit('ok')) return;
+    if (!PW.input.hit('ok') && !tapped) return;
 
     var sk = PW.skills.get(list[menu.idx]);
     if (!sk) return;
@@ -421,12 +429,17 @@ PW.BattleScene.prototype = {
   inputItem: function (m, menu) {
     var list = menu.list;
     this.moveIdx(menu, list.length, true);
+
+    var tapped = PW.ui.tapped('row');
+    if (tapped === 'miss') return;
+    if (tapped) menu.idx = tapped.idx;
+
     if (PW.input.hit('back')) {
       PW.audio.sfx('cancel');
       this.menu = { level: 'root', idx: 3 };
       return;
     }
-    if (!PW.input.hit('ok')) return;
+    if (!PW.input.hit('ok') && !tapped) return;
     PW.audio.sfx('confirm');
     var entry = list[menu.idx];
     var act = { type: 'item', item: entry.item, itemId: entry.id };
@@ -459,12 +472,21 @@ PW.BattleScene.prototype = {
     if (PW.input.rep('right') || PW.input.rep('down')) {
       menu.idx = (menu.idx + 1) % list.length; PW.audio.sfx('cursor');
     }
+    // Tapping a creature or a party card aims straight at it.
+    var tapped = PW.ui.tapped('target');
+    if (tapped === 'miss') return;
+    if (tapped) {
+      var i = list.indexOf(tapped.data);
+      if (i < 0) return;                 // not a legal target for this action
+      menu.idx = i;
+    }
+
     if (PW.input.hit('back')) {
       PW.audio.sfx('cancel');
       this.menu = { level: 'root', idx: 0 };
       return;
     }
-    if (PW.input.hit('ok')) {
+    if (PW.input.hit('ok') || tapped) {
       PW.audio.sfx('confirm');
       var act = menu.act;
       act.target = list[menu.idx];
@@ -1046,6 +1068,11 @@ PW.BattleScene.prototype = {
     this.box.draw(ctx);
   },
 
+  /** True while the player is choosing who an action lands on. */
+  aiming: function () {
+    return this.state === 'input' && this.menu && this.menu.level === 'target';
+  },
+
   drawFoes: function (ctx) {
     for (var i = 0; i < this.foes.length; i++) {
       var f = this.foes[i];
@@ -1064,6 +1091,10 @@ PW.BattleScene.prototype = {
       ctx.restore();
 
       if (!f.settled) this.drawFoeTag(ctx, f);
+      if (this.aiming()) {
+        var fw = f.img.width * f.scale, fh = f.img.height * f.scale;
+        PW.ui.region('target', i, f.x - fw / 2, f.y - fh, fw, fh + 26, f);
+      }
     }
   },
 
@@ -1109,6 +1140,13 @@ PW.BattleScene.prototype = {
       PW.draw.sprite(ctx, img, p.x, yy, s * (def.float ? 0.62 : 1),
         { rot: p.alive ? 0 : 0.4 });
       ctx.restore();
+
+      if (this.aiming()) {
+        // The card is a bigger, steadier target than the little sprite.
+        var L2 = PW.BattleScene.LAYOUT;
+        PW.ui.region('target', i, L2.cardX + i * (L2.cardW + L2.cardGap),
+                     yy - 96, L2.cardW, 96 + L2.cardH, p);
+      }
 
       if (p.shield > 0 && p.alive) {
         ctx.save();
@@ -1236,6 +1274,7 @@ PW.BattleScene.prototype = {
     for (var i = 0; i < opts.length; i++) {
       var sel = i === m.idx;
       var oy = y + 10 + i * 38;
+      PW.ui.region('cmd', i, x + 4, oy - 3, w - 8, 38);
       if (sel) {
         D.panel(ctx, x + 8, oy - 1, w - 16, 34, {
           fill: 'rgba(232,200,130,.7)', stroke: false, radius: 9, seed: 3 + i, shadow: false
@@ -1264,6 +1303,7 @@ PW.BattleScene.prototype = {
       var idx = start + i;
       var sel = idx === m.idx;
       var ry = y + 14 + i * 34;
+      PW.ui.region('row', idx, x + 6, ry - 4, w - 12, 34);
       if (sel) {
         D.panel(ctx, x + 10, ry - 2, w - 20, 32, {
           fill: 'rgba(232,200,130,.7)', stroke: false, radius: 8, seed: idx, shadow: false

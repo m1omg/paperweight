@@ -113,6 +113,9 @@ PW.game = (function () {
     if (veil.a > 0) PW.draw.fill(ctx, veil.color, veil.a);
 
     drawToasts();
+
+    // Whatever the scenes just declared is what a tap can land on next frame.
+    PW.ui.commit();
   }
 
   function drawToasts() {

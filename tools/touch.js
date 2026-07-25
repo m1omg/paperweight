@@ -117,6 +117,19 @@ function check(name, ok, detail) {
     await sleep(120);
   }
 
+  // Everything is declared in the 960x540 the game draws in, so the test asks
+  // the page to convert a game point into a screen point before tapping it.
+  const toScreen = async (gx, gy) => JSON.parse(await evaluate(`(function(){
+    var r = document.getElementById('screen').getBoundingClientRect();
+    return JSON.stringify([r.left + ${gx} / 960 * r.width,
+                           r.top  + ${gy} / 540 * r.height]);
+  })()`));
+
+  async function tapGame(gx, gy, fingers) {
+    const [sx, sy] = await toScreen(gx, gy);
+    await tap(fingers || 1, sx, sy);
+  }
+
   /* ------------------------------------------------------------ setup -- */
 
   await send('Runtime.enable');
@@ -146,7 +159,7 @@ function check(name, ok, detail) {
   /* ------------------------------------------------- one-finger = OK --- */
 
   check('title screen is up', (await evaluate('PW.game.top().name')) === 'title');
-  await tap(1);
+  await tapGame(200, 270);                         // the first option, "begin"
   check('one-finger tap confirms', (await evaluate('PW.game.top().mode')) === 'slots',
         await evaluate('PW.game.top().mode'));
 
@@ -168,6 +181,28 @@ function check(name, ok, detail) {
   check('an upward flick moves it back', (await evaluate('PW.game.top().idx')) === before);
 
   check('a flick is not also a tap', (await evaluate('PW.game.top().mode')) === 'title',
+        await evaluate('PW.game.top().mode'));
+
+  /* ------------------------------------------- tapping an option direct - */
+
+  // The title menu is 'begin' at y≈258 and 'about' at y≈304. The cursor starts
+  // on 'begin'; tapping 'about' must go straight there without any swiping.
+  check('cursor starts on the first option', (await evaluate('PW.game.top().idx')) === 0);
+  await tapGame(200, 316);
+  check('tapping a menu option selects it without swiping first',
+        (await evaluate('PW.game.top().mode')) === 'about',
+        'mode=' + await evaluate('PW.game.top().mode') +
+        ' idx=' + await evaluate('PW.game.top().idx'));
+  await tap(1);                                   // dismiss the about panel
+  await sleep(300);
+
+  // ...and a tap that lands nowhere near an option must not pick anything.
+  const idxBefore = await evaluate('PW.game.top().idx');
+  const modeBefore = await evaluate('PW.game.top().mode');
+  await tapGame(820, 120);
+  check('tapping past the menu does nothing',
+        (await evaluate('PW.game.top().mode')) === modeBefore &&
+        (await evaluate('PW.game.top().idx')) === idxBefore,
         await evaluate('PW.game.top().mode'));
 
   /* ------------------------------------------------------- in the world */
@@ -200,6 +235,49 @@ function check(name, ok, detail) {
   await sleep(120);
   check('a diagonal drag holds both axes', diag === '-1,-1', diag);
 
+  /* ------------------------------------------------ tapping in a battle - */
+
+  await evaluate("PWdebug.battle('hub_c')");
+  await sleep(2600);
+  await evaluate('PW.game.top().phaseT = 0');     // skip the intro beat
+  await sleep(700);
+  check('a battle is taking orders',
+        (await evaluate('PW.game.top().state')) === 'input',
+        await evaluate('PW.game.top().state'));
+
+  // The command list runs Hit / Do / Hold / Thing / Go downward from the card.
+  const cmd = JSON.parse(await evaluate(`(function(){
+    var b = PW.game.top();
+    var opts = b.rootOptions(b.inputMember());
+    var w = 176, h = opts.length * 38 + 20;
+    var x = Math.max(12, Math.min(b.inputMember().x - w/2, 960 - w - 12));
+    var y = 444 - h - 12;
+    return JSON.stringify([x + w/2, y + 10 + 2*38 + 17, opts[2].key]);
+  })()`));
+  check('the third command is Hold', cmd[2] === 'hold', cmd[2]);
+  await tapGame(cmd[0], cmd[1]);
+  check('tapping "Hold" jumps the cursor there and opens it',
+        (await evaluate('PW.game.top().menu && PW.game.top().menu.level')) === 'target' &&
+        (await evaluate('PW.game.top().menu && PW.game.top().menu.act.type')) === 'hold',
+        await evaluate('JSON.stringify(PW.game.top().menu && PW.game.top().menu.level)'));
+
+  // Now aim at the *second* creature by tapping it, not by swiping across.
+  const foe = JSON.parse(await evaluate(`(function(){
+    var b = PW.game.top(), f = b.livingFoes()[1];
+    return JSON.stringify([f.x, f.y - f.img.height * f.scale / 2, f.name]);
+  })()`));
+  await tapGame(foe[0], foe[1]);
+  const aimed = await evaluate(`(function(){
+    var b = PW.game.top();
+    var a = b.actions[b.party[0].id];
+    return a && a.target ? a.target.name : null;
+  })()`);
+  check('tapping a creature aims at that creature', aimed === foe[2],
+        aimed + ' (wanted ' + foe[2] + ')');
+
+  await evaluate("while(PW.game.top().name==='battle') PW.game.pop();");
+  await sleep(600);
+
   /* ---------------------------------------------- three fingers = menu - */
 
   await tap(3);
@@ -209,6 +287,10 @@ function check(name, ok, detail) {
 
   await drag(450, 260, 110, 0);
   check('swiping changes tab', (await evaluate('PW.game.top().tab')) === 1,
+        await evaluate('PW.game.top().tab'));
+
+  await tapGame(442, 90);                          // the third tab, "kept"
+  check('tapping a tab switches to it', (await evaluate('PW.game.top().tab')) === 2,
         await evaluate('PW.game.top().tab'));
 
   await tap(2);

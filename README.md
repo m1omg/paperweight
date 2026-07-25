@@ -30,8 +30,11 @@ the browser at runtime.
 | M | — | sound on/off |
 
 On touch, a drag is a thumbstick that follows your finger rather than a fixed
-pad: hold it to keep walking, flick it to nudge a menu cursor one step. The
-on-screen help changes to match whichever you are using.
+pad: hold it to keep walking, flick it to nudge a menu cursor one step. You can
+also just **tap the thing you want** — a menu option, a save slot, a tab, or the
+creature you mean to hit — and it is chosen outright, with no swiping to it
+first. Tapping past a menu does nothing rather than confirming whatever happened
+to be highlighted. The on-screen help changes to match whichever you are using.
 
 The game saves to three slots in `localStorage`, and writes automatically at
 each chapter break and whenever you sit down on the rug in the Hall of Doors.
@@ -133,6 +136,13 @@ keyboard produces, so not one scene knows or cares which is in use — dragging
 past a dead zone presses a direction, letting go releases it, and menu
 auto-repeat therefore behaves identically either way.
 
+**Tappable things** are declared, not laid out. A menu calls `PW.ui.region()`
+for each option while it draws; the list becomes live for the next frame, and a
+tap is matched against it. That is one frame stale — invisible to a player — and
+it means the menus stay plain drawing code with no layout pass and no retained
+widget tree. Three lines in a menu's update turn "confirm the highlighted row"
+into "go to the row you touched, and ignore touches that miss".
+
 **Cutscenes** are arrays of `[op, ...args]` interpreted by `PW.Script` —
 `say`, `narrate`, `choice`, `battle`, `goroom`, `give`, `flag`, and so on — which
 is why the story files read as prose with brackets round it.
@@ -170,7 +180,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 node tools/smoke.js           # 58 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
 node tools/paths.js           # 24 checks: endings, every skill, every item
-node tools/touch.js           # 20 checks: gestures, through real touch events
+node tools/touch.js           # 28 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 ```
 

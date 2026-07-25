@@ -40,11 +40,22 @@ PW.PocketScene.prototype = {
     if (PW.input.rep('left')) { this.tab = (this.tab + 2) % 3; this.idx = 0; PW.audio.sfx('cursor'); }
     if (PW.input.rep('right')) { this.tab = (this.tab + 1) % 3; this.idx = 0; PW.audio.sfx('cursor'); }
 
+    // A tap on a tab switches to it outright.
+    var tab = PW.ui.tapped('tab');
+    if (tab && tab !== 'miss') {
+      if (tab.idx !== this.tab) { this.tab = tab.idx; this.idx = 0; PW.audio.sfx('cursor'); }
+      return;
+    }
+
     var list = this.list();
     if (list.length) {
       if (PW.input.rep('up')) { this.idx = (this.idx + list.length - 1) % list.length; PW.audio.sfx('cursor'); }
       if (PW.input.rep('down')) { this.idx = (this.idx + 1) % list.length; PW.audio.sfx('cursor'); }
     }
+
+    var row = PW.ui.tapped('prow');
+    if (row === 'miss') return;
+    if (row) { this.idx = row.idx; this.activate(); return; }
 
     if (PW.input.hit('ok')) this.activate();
   },
@@ -52,8 +63,13 @@ PW.PocketScene.prototype = {
   updateConfirm: function () {
     if (PW.input.rep('left') || PW.input.rep('up')) { this.confirm.idx = 0; PW.audio.sfx('cursor'); }
     if (PW.input.rep('right') || PW.input.rep('down')) { this.confirm.idx = 1; PW.audio.sfx('cursor'); }
+
+    var t = PW.ui.tapped('yesno');
+    if (t === 'miss') return;
+    if (t) this.confirm.idx = t.idx;
+
     if (PW.input.hit('back')) { PW.audio.sfx('cancel'); this.confirm = null; return; }
-    if (PW.input.hit('ok')) {
+    if (PW.input.hit('ok') || t) {
       PW.audio.sfx('confirm');
       var c = this.confirm;
       this.confirm = null;
@@ -150,6 +166,7 @@ PW.PocketScene.prototype = {
     for (var i = 0; i < names.length; i++) {
       var sel = i === this.tab;
       var tw = 132, tx = x + 22 + i * (tw + 8);
+      PW.ui.region('tab', i, tx, y + 10, tw, 44);
       if (sel) {
         D.panel(ctx, tx, y + 14, tw, 38, {
           fill: 'rgba(232,200,130,.75)', stroke: '#3a3050', radius: 10, seed: 5 + i, shadow: false
@@ -176,6 +193,7 @@ PW.PocketScene.prototype = {
       var def = PW.actors[id], r = PW.party.rec(id), s = PW.party.stats(id);
       var sel = i === this.idx;
       var ry = y + 70 + i * 82;
+      PW.ui.region('prow', i, x + 18, ry - 6, w - 36, 76);
 
       if (sel) {
         D.panel(ctx, x + 18, ry - 6, w - 36, 76, {
@@ -223,6 +241,7 @@ PW.PocketScene.prototype = {
       var id = list[i], item = PW.items.get(id);
       var sel = i === this.idx;
       var ry = y + 70 + i * 52;
+      PW.ui.region('prow', i, x + 18, ry - 4, w - 36, 46);
       if (sel) {
         D.panel(ctx, x + 18, ry - 4, w - 36, 46, {
           fill: 'rgba(232,200,130,.4)', stroke: false, radius: 10, seed: 70 + i, shadow: false
@@ -248,6 +267,7 @@ PW.PocketScene.prototype = {
       var ry = y + 86 + i * 74;
       var id = list[i];
       var sel = i === this.idx && id;
+      if (id) PW.ui.region('prow', i, x + 22, ry, w - 44, 64);
 
       D.panel(ctx, x + 22, ry, w - 44, 64, {
         fill: sel ? 'rgba(232,200,130,.5)' : (id ? 'rgba(58,48,80,.07)' : 'rgba(58,48,80,.03)'),
@@ -293,6 +313,7 @@ PW.PocketScene.prototype = {
     for (var i = 0; i < 2; i++) {
       var sel = i === this.confirm.idx;
       var bx = x + 120 + i * 160;
+      PW.ui.region('yesno', i, bx - 16, y + h - 60, 114, 46);
       if (sel) {
         D.panel(ctx, bx - 12, y + h - 56, 106, 38, {
           fill: 'rgba(232,200,130,.75)', stroke: '#3a3050', radius: 9, seed: 7 + i, shadow: false

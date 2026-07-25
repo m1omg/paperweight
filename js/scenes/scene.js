@@ -89,6 +89,11 @@ PW.DialogueBox.prototype = {
       var n = this.choices.length;
       if (PW.input.rep('up')) { this.choiceIdx = (this.choiceIdx + n - 1) % n; PW.audio.sfx('cursor'); }
       if (PW.input.rep('down')) { this.choiceIdx = (this.choiceIdx + 1) % n; PW.audio.sfx('cursor'); }
+
+      var t = PW.ui.tapped('choice');
+      if (t === 'miss') return false;
+      if (t) this.choiceIdx = t.idx;
+
       if (PW.input.hit('ok')) {
         PW.audio.sfx('confirm');
         var cb = this.onChoice, i = this.choiceIdx;
@@ -201,6 +206,7 @@ PW.DialogueBox.prototype = {
     for (var j = 0; j < this.choices.length; j++) {
       var sel = j === this.choiceIdx;
       var ty = y + 12 + j * 42;
+      PW.ui.region('choice', j, x + 6, ty - 4, w - 12, 42);
       if (sel) {
         D.panel(ctx, x + 10, ty - 2, w - 20, 38, {
           fill: 'rgba(232,200,130,.65)', stroke: false, radius: 10, seed: 5 + j, shadow: false
