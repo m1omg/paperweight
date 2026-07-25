@@ -53,17 +53,21 @@ PW.ui = (function () {
     /**
      * What a tap this frame means for the menu called `tag`:
      *   {idx}   an option was tapped
-     *   'miss'  something was tapped, this menu is on screen, and it was not it
+     *   'miss'  something was tapped and it was not one of this menu's options
      *   null    nothing was tapped
+     *
+     * A miss is reported even when the menu has no live regions at all, which
+     * is the case for exactly one frame after it opens. Without that, a tap
+     * arriving in that window would fall through to the plain confirm and pick
+     * whatever the cursor was resting on — the wrong thing, and precisely when
+     * the player is tapping fastest. Only ever call this from a menu that does
+     * declare regions; plain "tap to continue" paths must not call it at all.
      */
     tapped: function (tag) {
       var p = PW.input.tap();
       if (!p) return null;
       var r = this.at(p.x, p.y);
-      if (r && r.tag === tag) return r;
-      // Only claim a miss for a menu that is actually showing, so tapping to
-      // advance a line of dialogue is never mistaken for missing a menu.
-      return this.has(tag) ? 'miss' : null;
+      return (r && r.tag === tag) ? r : 'miss';
     }
   };
 })();

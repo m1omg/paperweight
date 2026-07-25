@@ -17,11 +17,21 @@ const http = require('http');
 
 const ROOT = path.dirname(__dirname);
 const TARGET = process.argv[2] || 'file://' + path.join(ROOT, 'index.html');
-const PORT = 9555;
+const PORT = 9000 + Math.floor(Math.random() * 900);   // avoid colliding with a previous run
 const CHROME = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
   .find((p) => fs.existsSync(p));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Chrome forks renderer processes that outlive a plain kill() on the launcher.
+   Leaving one behind means the next run connects to the *previous* browser on
+   the same debug port and tests a stale page, which is a genuinely baffling
+   way to spend an afternoon. */
+function shutdown(proc) {
+  try { process.kill(-proc.pid, 'SIGKILL'); } catch (e) { /* already gone */ }
+  try { proc.kill('SIGKILL'); } catch (e) { /* already gone */ }
+}
+
 const get = (u) => new Promise((res, rej) => {
   http.get(u, (r) => { let d = ''; r.on('data', (c) => { d += c; }); r.on('end', () => res(JSON.parse(d))); })
     .on('error', rej);
@@ -43,7 +53,7 @@ function check(name, ok, detail) {
     '--window-size=900,520', '--hide-scrollbars',
     '--autoplay-policy=no-user-gesture-required',
     '--allow-file-access-from-files', TARGET
-  ], { stdio: 'ignore' });
+  ], { stdio: 'ignore', detached: true });
 
   let t = null;
   for (let i = 0; i < 80 && !t; i++) {
@@ -51,7 +61,7 @@ function check(name, ok, detail) {
     try { t = (await get(`http://127.0.0.1:${PORT}/json/list`)).filter((x) => x.type === 'page')[0]; }
     catch (e) { /* not up yet */ }
   }
-  if (!t) { console.error('chrome did not start'); chrome.kill(); process.exit(1); }
+  if (!t) { console.error('chrome did not start'); shutdown(chrome); process.exit(1); }
 
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   let id = 0;
@@ -124,6 +134,15 @@ function check(name, ok, detail) {
     return JSON.stringify([r.left + ${gx} / 960 * r.width,
                            r.top  + ${gy} / 540 * r.height]);
   })()`));
+
+  /** Wait until a menu's tap targets are live (one frame after it draws). */
+  async function awaitRegions(tag) {
+    for (let i = 0; i < 40; i++) {
+      if (await evaluate('PW.ui.has(' + JSON.stringify(tag) + ')')) return true;
+      await sleep(50);
+    }
+    return false;
+  }
 
   async function tapGame(gx, gy, fingers) {
     const [sx, sy] = await toScreen(gx, gy);
@@ -255,6 +274,7 @@ function check(name, ok, detail) {
     return JSON.stringify([x + w/2, y + 10 + 2*38 + 17, opts[2].key]);
   })()`));
   check('the third command is Hold', cmd[2] === 'hold', cmd[2]);
+  check('the command list is tappable', await awaitRegions('cmd'));
   await tapGame(cmd[0], cmd[1]);
   check('tapping "Hold" jumps the cursor there and opens it',
         (await evaluate('PW.game.top().menu && PW.game.top().menu.level')) === 'target' &&
@@ -266,6 +286,7 @@ function check(name, ok, detail) {
     var b = PW.game.top(), f = b.livingFoes()[1];
     return JSON.stringify([f.x, f.y - f.img.height * f.scale / 2, f.name]);
   })()`));
+  check('the creatures became tappable', await awaitRegions('target'));
   await tapGame(foe[0], foe[1]);
   const aimed = await evaluate(`(function(){
     var b = PW.game.top();
@@ -274,6 +295,33 @@ function check(name, ok, detail) {
   })()`);
   check('tapping a creature aims at that creature', aimed === foe[2],
         aimed + ' (wanted ' + foe[2] + ')');
+
+  // The one frame after a menu opens it has declared nothing yet. A tap in
+  // that window must read as a miss, not fall through to the plain confirm and
+  // pick whatever the cursor was resting on. The window is a single frame, so
+  // this asks the rule directly rather than trying to race it.
+  const verdicts = JSON.parse(await evaluate([
+    '(function(){',
+    '  var real = PW.input.tap, out = {};',
+    '  PW.input.tap = function(){ return { x: 480, y: 270 }; };',
+    '  PW.ui.clear();',
+    "  out.empty = PW.ui.tapped('target');",
+    "  PW.ui.region('target', 7, 400, 200, 160, 140, 'the moth');",
+    '  PW.ui.commit();',
+    "  var hit = PW.ui.tapped('target');",
+    '  out.hitIdx = hit && hit.idx; out.hitData = hit && hit.data;',
+    "  out.other = PW.ui.tapped('cmd');",
+    '  PW.input.tap = real; PW.ui.clear();',
+    '  return JSON.stringify(out);',
+    '})()'
+  ].join('\n')));
+  check('a tap before a menu has declared anything is a miss',
+        verdicts.empty === 'miss', String(verdicts.empty));
+  check('a tap inside a declared region returns it',
+        verdicts.hitIdx === 7 && verdicts.hitData === 'the moth',
+        verdicts.hitIdx + '/' + verdicts.hitData);
+  check("a tap on another menu's region is a miss here",
+        verdicts.other === 'miss', String(verdicts.other));
 
   await evaluate("while(PW.game.top().name==='battle') PW.game.pop();");
   await sleep(600);
@@ -324,7 +372,7 @@ function check(name, ok, detail) {
 
   console.log('\n' + pass + '/' + (pass + fail) + ' touch checks passed');
   ws.close();
-  chrome.kill();
+  shutdown(chrome);
   try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 }); } catch (e) { /* */ }
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

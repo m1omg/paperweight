@@ -15,11 +15,21 @@ const http = require('http');
 
 const ROOT = path.dirname(__dirname);
 const OUT = process.argv[2] || path.join(ROOT, 'shots');
-const PORT = 9333;
+const PORT = 9000 + Math.floor(Math.random() * 900);   // avoid colliding with a previous run
 const CHROME = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
   .find((p) => fs.existsSync(p));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Chrome forks renderer processes that outlive a plain kill() on the launcher.
+   Leaving one behind means the next run connects to the *previous* browser on
+   the same debug port and tests a stale page, which is a genuinely baffling
+   way to spend an afternoon. */
+function shutdown(proc) {
+  try { process.kill(-proc.pid, 'SIGKILL'); } catch (e) { /* already gone */ }
+  try { proc.kill('SIGKILL'); } catch (e) { /* already gone */ }
+}
+
 
 function get(url) {
   return new Promise((resolve, reject) => {
@@ -43,7 +53,7 @@ async function main() {
     '--autoplay-policy=no-user-gesture-required',
     '--allow-file-access-from-files',
     'file://' + path.join(ROOT, 'index.html')
-  ], { stdio: 'ignore' });
+  ], { stdio: 'ignore', detached: true });
 
   let targets = null;
   for (let i = 0; i < 60 && !targets; i++) {
@@ -51,7 +61,7 @@ async function main() {
     try { targets = (await get(`http://127.0.0.1:${PORT}/json/list`)).filter((t) => t.type === 'page'); }
     catch (e) { /* not up yet */ }
   }
-  if (!targets || !targets.length) { console.error('chrome did not start'); chrome.kill(); process.exit(1); }
+  if (!targets || !targets.length) { console.error('chrome did not start'); shutdown(chrome); process.exit(1); }
 
   const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
   let id = 0;
@@ -199,7 +209,7 @@ async function main() {
   logs.filter((l) => /PAPERWEIGHT/.test(l)).forEach((l) => console.log('  ' + l));
 
   ws.close();
-  chrome.kill();
+  shutdown(chrome);
   try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 }); } catch (e) { /* chrome still letting go */ }
   process.exit(bad.length ? 1 : 0);
 }
