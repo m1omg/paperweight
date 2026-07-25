@@ -82,7 +82,7 @@ exports.main = function (H) {
      another. Sweep every standable tile in every room, in all four facings,
      and make sure each entity wins the pick from somewhere. */
   const unreachable = [];
-  const OFF = { up: [0, -36], down: [0, 30], left: [-36, -14], right: [36, -14] };
+  const DIRS = ['up', 'down', 'left', 'right'];
   Object.keys(PW.rooms).forEach((rid) => {
     const r = PW.rooms[rid];
     const scene = new PW.FieldScene(rid, Object.keys(r.spawns)[0]);
@@ -96,8 +96,8 @@ exports.main = function (H) {
     for (let x = 0; x < 960; x += 8) {
       for (let y = 0; y < 540; y += 8) {
         if (!scene.canStand(x, y)) continue;
-        for (const dir in OFF) {
-          const e = scene.nearest(x + OFF[dir][0], y + OFF[dir][1]);
+        for (const dir of DIRS) {
+          const e = scene.nearest({ x, y, dir });
           if (e) reachable.add(e.id);
         }
       }
@@ -109,6 +109,43 @@ exports.main = function (H) {
   });
   check('every interactive thing can be reached', unreachable.length === 0,
         unreachable.join(', '));
+
+  /* Reachable-from-somewhere is not enough: a spawn point standing inside a
+     door sends the player straight back where they came from, and a box that
+     can only be won from one tile in the room is a box nobody will find. */
+  const flimsy = [];
+  Object.keys(PW.rooms).forEach((rid) => {
+    const r = PW.rooms[rid];
+    const scene = new PW.FieldScene(rid, Object.keys(r.spawns)[0]);
+    scene.room = r;
+    scene.entities = r.entities.map((e) => {
+      const o = Object.create(e);
+      o.visible = true;
+      return o;
+    });
+    const tiles = {};
+    for (let x = 0; x < 960; x += 8) {
+      for (let y = 0; y < 540; y += 8) {
+        if (!scene.canStand(x, y)) continue;
+        for (const dir of DIRS) {
+          const e = scene.nearest({ x, y, dir });
+          if (e) tiles[e.id] = (tiles[e.id] || 0) + 1;
+        }
+      }
+    }
+    r.entities.forEach((e) => {
+      if (!e.talk && !e.kind) return;
+      if ((tiles[e.id] || 0) < 4) flimsy.push(rid + '.' + e.id + ' (' + (tiles[e.id] || 0) + ')');
+    });
+    Object.keys(r.spawns).forEach((sid) => {
+      const s = r.spawns[sid];
+      if (!scene.canStand(s.x, s.y)) flimsy.push(rid + '.' + sid + ' is off the floor');
+      const e = scene.nearest({ x: s.x, y: s.y, dir: s.dir || 'down' });
+      if (e && e.kind === 'door') flimsy.push(rid + '.' + sid + ' faces straight into ' + e.id);
+    });
+  });
+  check('nothing is reachable from only a sliver of floor', flimsy.length === 0,
+        flimsy.join(', '));
 
   // Items referenced by drops / soothe rewards must exist.
   let badItem = [];
@@ -197,6 +234,28 @@ exports.main = function (H) {
     tick('ok'); run(6);
     return true;
   }
+  /* Put the player on the nearest patch of floor from which this entity is the
+     one they would touch. Guessing a spot and a facing is not good enough: the
+     rooms are painted, so what stands where is not predictable from the id. */
+  function stand(sc, e) {
+    let best = null, bestD = 1e9;
+    for (let x = 0; x < 960; x += 8) {
+      for (let y = 0; y < 540; y += 8) {
+        if (!sc.canStand(x, y)) continue;
+        for (const dir of ['up', 'down', 'left', 'right']) {
+          if (sc.nearest({ x, y, dir }) !== e) continue;
+          const d = Math.hypot(x - e.x, y - e.y);
+          if (d < bestD) { bestD = d; best = { x, y, dir }; }
+        }
+      }
+    }
+    if (!best) return false;
+    sc.player.x = best.x;
+    sc.player.y = best.y;
+    sc.player.dir = best.dir;
+    return true;
+  }
+
   /** Stand in front of an entity and interact with it. */
   function use(id) {
     // A press during a room transition is swallowed; wait for control first.
@@ -205,14 +264,7 @@ exports.main = function (H) {
     if (sc.name !== 'field') return false;
     const e = sc.entities.find((x) => x.id === id);
     if (!e || !e.visible) return false;
-    sc.player.x = e.x;
-    sc.player.y = Math.min(e.y + 26, 520);
-    // Make sure we are standing somewhere legal, and facing the thing.
-    if (!sc.canStand(sc.player.x, sc.player.y)) {
-      const w = sc.room.walk[sc.room.walk.length - 1];
-      sc.player.y = w[1] + w[3] - 8;
-    }
-    sc.player.dir = sc.player.y > e.y ? 'up' : 'down';
+    if (!stand(sc, e)) return false;
     run(2);
     tick('ok');
     run(4);

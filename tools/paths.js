@@ -121,11 +121,17 @@ PW.save.reset();
 PW.flag('tutorial_done',true); PW.flag('ch_interlude',true); PW.flag('can_sleep',true);
 PW.game.start(new PW.FieldScene('landing','frombedroom'));
 until(()=>!top().script.running&&!PW.game.busy(),'ok',600);
+// Walk to the nearest floor tile from which `e` is the thing the player would
+// touch, rather than guessing a spot — the rooms are painted, not laid out.
+function stand(sc,e){ let best=null,bestD=1e9;
+  for(let x=0;x<960;x+=8) for(let y=0;y<540;y+=8){ if(!sc.canStand(x,y)) continue;
+    for(const dir of ['up','down','left','right']){ if(sc.nearest({x,y,dir})!==e) continue;
+      const d=Math.hypot(x-e.x,y-e.y); if(d<bestD){bestD=d;best={x,y,dir};} } }
+  if(!best) return false;
+  sc.player.x=best.x; sc.player.y=best.y; sc.player.dir=best.dir; return true; }
 function use(id){ until(()=>top().name==='field'&&!top().script.running&&!top().box.active&&!PW.game.busy(),null,600);
   const sc=top(); const e=sc.entities.find(x=>x.id===id); if(!e||!e.visible) return false;
-  sc.player.x=e.x; sc.player.y=Math.min(e.y+26,520);
-  if(!sc.canStand(sc.player.x,sc.player.y)){const w=sc.room.walk[sc.room.walk.length-1];sc.player.y=w[1]+w[3]-8;}
-  sc.player.dir=sc.player.y>e.y?'up':'down'; run(2); tick('ok'); run(4); return true; }
+  if(!stand(sc,e)) return false; run(2); tick('ok'); run(4); return true; }
 use('nelsdoor'); until(()=>top().box.choices,'ok',600); tick('ok'); run(6);
 until(()=>!top().script.running,'ok',900);
 ck('her door in the real world can be approached', PW.flag('tried_door'));

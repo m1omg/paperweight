@@ -20,6 +20,12 @@ PW.FieldScene = function (roomId, spawnId) {
 
 PW.FieldScene.SPRITE = 0.46;      // walk sprites are drawn at ~46% of source
 PW.FieldScene.FOLLOW_GAP = 40;    // pixels of trail between party members
+PW.FieldScene.REACH = 96;         // how far the player's arm goes, in pixels
+PW.FieldScene.AIM = 0.34;         // how squarely they must face it (~70 degrees)
+
+PW.FieldScene.DIRV = {
+  up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0]
+};
 
 PW.FieldScene.prototype = {
 
@@ -263,37 +269,54 @@ PW.FieldScene.prototype = {
 
   /* ------------------------------------------------------ interaction -- */
 
-  /** The point just in front of the player's feet, in the way they face. */
-  facingPoint: function () {
-    var p = this.player;
-    var off = { up: [0, -36], down: [0, 30], left: [-36, -14], right: [36, -14] }[p.dir];
-    return [p.x + off[0], p.y + off[1]];
-  },
+  /* What the player is about to touch.
+   *
+   * This is judged from where the player is standing, not from a single probe
+   * point in front of them: anything within arm's reach that lies in the
+   * direction they face is a candidate, and whichever they face most squarely
+   * wins. Standing inside something — a doorway, a rug — counts as reaching it
+   * from any direction.
+   *
+   * A probe point is what this used to be, and it was far too brittle: a box a
+   * few pixels out of place, or one merely narrower than the gap between two
+   * standing spots, could not be picked at all. Reaching from the body means
+   * the boxes only have to sit roughly on the object they stand for.
+   *
+   * `at` lets callers ask the question from somewhere the player is not, which
+   * is how the reachability sweep in the tests works.
+   */
+  nearest: function (at) {
+    var p = at || this.player;
+    var dir = PW.FieldScene.DIRV[p.dir] || PW.FieldScene.DIRV.down;
+    var best = null, bestScore = 1e9;
 
-  /* Interaction boxes overlap in most rooms — a shelf above a desk, a rug under
-     everything. Anything the player is pointing *inside* beats anything merely
-     nearby, and among those the nearest middle wins. */
-  nearest: function (fx, fy) {
-    var best = null, bestD = 1e9;
     for (var i = 0; i < this.entities.length; i++) {
       var e = this.entities[i];
       if (!e.visible) continue;
       if (!e.talk && !e.kind) continue;
-      var box = [e.x - e.w / 2, e.y - e.h, e.w, e.h];
-      var cx = PW.util.clamp(fx, box[0], box[0] + box[2]);
-      var cy = PW.util.clamp(fy, box[1], box[1] + box[3]);
-      var d = PW.util.dist(fx, fy, cx, cy);
-      if (PW.util.inRect(fx, fy, box)) {
-        d = PW.util.dist(fx, fy, e.x, e.y - e.h / 2) * 0.01;
-      }
-      if (d < 34 && d < bestD) { bestD = d; best = e; }
+
+      var x0 = e.x - e.w / 2, y0 = e.y - e.h;
+      var cx = PW.util.clamp(p.x, x0, x0 + e.w);
+      var cy = PW.util.clamp(p.y, y0, y0 + e.h);
+      var dx = cx - p.x, dy = cy - p.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > PW.FieldScene.REACH) continue;
+
+      // Standing in it is as good as facing it head-on.
+      var aim = d < 6 ? 1 : (dx / d) * dir[0] + (dy / d) * dir[1];
+      if (aim < PW.FieldScene.AIM) continue;
+
+      // Nearest wins, squareness helps, and the distance to the middle breaks
+      // ties between two things the player happens to be standing inside.
+      var score = d + (1 - aim) * 30 +
+                  PW.util.dist(p.x, p.y, e.x, e.y - e.h / 2) * 0.05;
+      if (score < bestScore) { bestScore = score; best = e; }
     }
     return best;
   },
 
   interact: function () {
-    var f = this.facingPoint();
-    var e = this.nearest(f[0], f[1]);
+    var e = this.nearest();
     if (e) this.trigger(e);
   },
 
@@ -511,15 +534,17 @@ PW.FieldScene.prototype = {
 
   drawInteractHint: function (ctx) {
     if (this.box.active || this.script.running) return;
-    var f = this.facingPoint();
-    var e = this.nearest(f[0], f[1]);
+    var e = this.nearest();
     if (!e) return;
+    // Some boxes reach off the top of the screen — a hatch in the ceiling, a
+    // bookcase taller than the room — so the label is kept where it can be read.
+    var lx = PW.util.clamp(e.x, 76, PW.W - 76);
+    var ly = PW.util.clamp(e.y - e.h - 26, 14, PW.H - 150);
     ctx.save();
     ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.t * 4);
-    PW.draw.text(ctx, e.label || (e.kind === 'door' ? 'a door' : 'look'),
-      e.x, e.y - e.h - 26, {
-        size: 16, align: 'center', color: '#f6e7c4', shadow: true, shadowOff: 2
-      });
+    PW.draw.text(ctx, e.label || (e.kind === 'door' ? 'a door' : 'look'), lx, ly, {
+      size: 16, align: 'center', color: '#f6e7c4', shadow: true, shadowOff: 2
+    });
     ctx.restore();
   },
 
