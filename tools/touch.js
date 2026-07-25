@@ -171,8 +171,13 @@ function check(name, ok, detail) {
   })()`);
   const [bx, by] = JSON.parse(box);
   await tap(1, bx, by);
-  await sleep(1600);
-  check('tapping "begin" starts the game', await evaluate('!!PW.game.top()'),
+  // Wait for the title scene rather than guessing: a cold CDN takes its time.
+  let booted = false;
+  for (let i = 0; i < 60 && !booted; i++) {
+    booted = (await evaluate('!!PW.game.top() && PW.game.top().name === "title"')) === true;
+    if (!booted) await sleep(200);
+  }
+  check('tapping "begin" starts the game', booted,
         await evaluate('PW.game.top() && PW.game.top().name'));
 
   /* ------------------------------------------------- one-finger = OK --- */
@@ -257,9 +262,15 @@ function check(name, ok, detail) {
   /* ------------------------------------------------ tapping in a battle - */
 
   await evaluate("PWdebug.battle('hub_c')");
-  await sleep(2600);
+  for (let i = 0; i < 60; i++) {
+    if ((await evaluate('PW.game.top().name')) === 'battle') break;
+    await sleep(100);
+  }
   await evaluate('PW.game.top().phaseT = 0');     // skip the intro beat
-  await sleep(700);
+  for (let i = 0; i < 60; i++) {
+    if ((await evaluate('PW.game.top().state')) === 'input') break;
+    await sleep(100);
+  }
   check('a battle is taking orders',
         (await evaluate('PW.game.top().state')) === 'input',
         await evaluate('PW.game.top().state'));
