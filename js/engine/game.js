@@ -134,11 +134,13 @@ PW.game = (function () {
   }
 
   function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      (document.documentElement.requestFullscreen || function () {}).call(document.documentElement);
-    } else if (document.exitFullscreen) {
-      document.exitFullscreen();
-    }
+    var el = document.documentElement;
+    // Safari on iOS only ever had the prefixed form.
+    var req = el.requestFullscreen || el.webkitRequestFullscreen;
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    var on = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!on) { if (req) req.call(el); }
+    else if (exit) { exit.call(document); }
   }
 
   /* ---------------------------------------------------------- scenes ---- */
@@ -175,7 +177,23 @@ PW.game = (function () {
       ctx.textBaseline = 'top';
       fit();
       window.addEventListener('resize', fit);
-      document.addEventListener('fullscreenchange', fit);
+      window.addEventListener('orientationchange', fit);
+      ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
+        document.addEventListener(ev, function () {
+          fit();
+          var on = document.fullscreenElement || document.webkitFullscreenElement;
+          document.body.classList.toggle('is-fullscreen', !!on);
+        });
+      });
+
+      // Touch devices get a real button, because there is no F key to press.
+      var fsBtn = document.getElementById('fs');
+      if (fsBtn) {
+        fsBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          toggleFullscreen();
+        });
+      }
       onReady && onReady();
     },
 
@@ -240,7 +258,8 @@ PW.game = (function () {
       flashes.push({ color: color || '#fff', strength: strength || 0.6, t: dur || 0.25, dur: dur || 0.25 });
     },
 
-    toast: toast
+    toast: toast,
+    toggleFullscreen: toggleFullscreen
   };
 
   function toast(msg) { toasts.push({ msg: msg, t: 2.2 }); }

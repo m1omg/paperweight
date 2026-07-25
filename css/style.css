@@ -4,6 +4,13 @@ html, body {
   width: 100%; height: 100%;
   background: #0b0a14;
   overflow: hidden;
+  /* The game reads raw touches, so the browser must not also scroll, zoom,
+     pull-to-refresh, or turn a double tap into a zoom. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   font-family: 'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Neue',
                'Trebuchet MS', system-ui, sans-serif;
   color: #f4ecdd;
@@ -12,6 +19,7 @@ html, body {
 #stage {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
+  touch-action: none;
 }
 
 #screen {
@@ -30,18 +38,25 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   z-index: 10;
   transition: opacity .6s ease;
+  /* Ordinary HTML — its button still needs a normal tap to click. */
+  touch-action: manipulation;
 }
 #boot.gone { opacity: 0; pointer-events: none; }
 
 #boot-inner { text-align: center; width: min(560px, 86vw); }
 
 #boot-title {
-  font-size: 46px; letter-spacing: .34em; text-indent: .34em;
+  /* Tracked-out capitals overflow a narrow phone long before they overflow a
+     desktop, so both the size and the tracking scale with the viewport. */
+  font-size: clamp(22px, 7.4vw, 46px);
+  letter-spacing: clamp(.10em, 1.4vw, .34em);
+  text-indent: clamp(.10em, 1.4vw, .34em);
   color: #f6e7c4;
   text-shadow: 0 0 26px rgba(246, 231, 196, .28);
 }
 #boot-sub {
-  margin-top: 14px; font-size: 15px; color: #8d86a6; letter-spacing: .06em;
+  margin-top: 14px; font-size: clamp(12px, 3.4vw, 15px);
+  color: #8d86a6; letter-spacing: .06em;
 }
 #boot-bar {
   margin: 34px auto 0; width: 100%; height: 5px;
@@ -63,6 +78,59 @@ html, body {
 }
 #boot-go:hover { transform: translateY(-2px); box-shadow: 0 6px 22px rgba(246, 231, 196, .3); }
 
-#boot-keys {
+.keys {
   margin-top: 40px; font-size: 12px; color: #4f4a66; line-height: 1.9;
+}
+
+/* Short landscape phones have no room to spare between the title and the
+   button, so the whole stack tightens up rather than scrolling off. */
+@media (max-height: 460px) {
+  #boot-bar { margin-top: 18px; }
+  #boot-sub { margin-top: 8px; }
+  #boot-go { margin-top: 14px; padding: 9px 26px; font-size: 15px; }
+  .keys { margin-top: 14px; }
+}
+
+/* ------------------------------------------------- touch-only chrome --- */
+
+#boot-touch { display: none; }
+
+#fs, #rotate { display: none; }
+
+/* `pointer: coarse` is the honest test for "a finger is the pointing device",
+   and it is what decides whether the touch help and the fullscreen button
+   appear at all — a desktop with a touchscreen still gets the keyboard text. */
+@media (pointer: coarse) {
+  #boot-keys { display: none; }
+  #boot-touch { display: block; }
+
+  #fs {
+    display: block;
+    position: absolute; right: 14px; bottom: 14px;
+    width: 44px; height: 44px;
+    font-size: 20px; line-height: 1;
+    color: #b9a9cd;
+    background: rgba(20, 16, 32, .55);
+    border: 1px solid rgba(185, 169, 205, .35);
+    border-radius: 50%;
+    z-index: 20;
+    touch-action: manipulation;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  #fs:active { background: rgba(246, 231, 196, .25); }
+  /* Once we are fullscreen the button has done its job and gets out of the way. */
+  body.is-fullscreen #fs { opacity: .25; }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  #rotate {
+    display: block;
+    position: absolute; left: 0; right: 0; top: 14px;
+    text-align: center;
+    font-size: 13px; letter-spacing: .08em;
+    color: #6d6786;
+    z-index: 19;
+    pointer-events: none;
+  }
 }

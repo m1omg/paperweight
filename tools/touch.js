@@ -1,0 +1,248 @@
+/* PAPERWEIGHT — drive the game with real touch events.
+ *
+ * Launches Chrome with touch emulation on, loads the game, and sends genuine
+ * touchstart/move/end sequences through the browser's input pipeline — the
+ * only way to prove the gesture layer works, since the headless harness stubs
+ * input out entirely.
+ *
+ *   node tools/touch.js            local file://
+ *   node tools/touch.js <url>      a deployed copy
+ */
+'use strict';
+
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+
+const ROOT = path.dirname(__dirname);
+const TARGET = process.argv[2] || 'file://' + path.join(ROOT, 'index.html');
+const PORT = 9555;
+const CHROME = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
+  .find((p) => fs.existsSync(p));
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const get = (u) => new Promise((res, rej) => {
+  http.get(u, (r) => { let d = ''; r.on('data', (c) => { d += c; }); r.on('end', () => res(JSON.parse(d))); })
+    .on('error', rej);
+});
+
+let pass = 0, fail = 0;
+function check(name, ok, detail) {
+  ok ? pass++ : fail++;
+  console.log((ok ? '  ok   ' : '  FAIL ') + name + (detail !== undefined ? '  — ' + detail : ''));
+}
+
+(async () => {
+  if (!CHROME) { console.error('no chrome found'); process.exit(1); }
+
+  const profile = fs.mkdtempSync('/tmp/pw-touch-');
+  const chrome = spawn(CHROME, [
+    '--headless=new', '--remote-debugging-port=' + PORT,
+    '--user-data-dir=' + profile, '--no-first-run', '--no-sandbox',
+    '--window-size=900,520', '--hide-scrollbars',
+    '--autoplay-policy=no-user-gesture-required',
+    '--allow-file-access-from-files', TARGET
+  ], { stdio: 'ignore' });
+
+  let t = null;
+  for (let i = 0; i < 80 && !t; i++) {
+    await sleep(250);
+    try { t = (await get(`http://127.0.0.1:${PORT}/json/list`)).filter((x) => x.type === 'page')[0]; }
+    catch (e) { /* not up yet */ }
+  }
+  if (!t) { console.error('chrome did not start'); chrome.kill(); process.exit(1); }
+
+  const ws = new WebSocket(t.webSocketDebuggerUrl);
+  let id = 0;
+  const waiting = new Map();
+  const logs = [];
+  ws.addEventListener('message', (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+    if (m.method === 'Runtime.exceptionThrown') {
+      logs.push('EXCEPTION: ' + (m.params.exceptionDetails.exception || {}).description);
+    }
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
+      logs.push('error: ' + m.params.args.map((a) => a.value).join(' '));
+    }
+  });
+  await new Promise((r) => ws.addEventListener('open', r));
+
+  const send = (method, params = {}) => {
+    const i = ++id;
+    ws.send(JSON.stringify({ id: i, method, params }));
+    return new Promise((r) => waiting.set(i, r));
+  };
+  const evaluate = async (expr) => {
+    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true });
+    return r.result.result.value;
+  };
+
+  /* -------------------------------------------------------- gestures --- */
+
+  const pt = (x, y, i) => ({ x, y, id: i, radiusX: 12, radiusY: 12, force: 1 });
+
+  async function touchStart(points) {
+    await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points });
+  }
+  async function touchMove(points) {
+    await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: points });
+  }
+  async function touchEnd() {
+    await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+
+  /** A tap with `n` fingers, all down together, all up together. */
+  async function tap(n, x = 450, y = 260) {
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push(pt(x + i * 40, y, i));
+    // Fingers land one at a time, as they do on a real screen.
+    for (let i = 0; i < n; i++) await touchStart(pts.slice(0, i + 1));
+    await sleep(60);
+    await touchEnd();
+    await sleep(160);
+  }
+
+  /** Drag from (x,y) by (dx,dy), hold for `holdMs`, then let go. */
+  async function drag(x, y, dx, dy, holdMs = 0) {
+    await touchStart([pt(x, y, 0)]);
+    const steps = 5;
+    for (let i = 1; i <= steps; i++) {
+      await touchMove([pt(x + dx * i / steps, y + dy * i / steps, 0)]);
+      await sleep(16);
+    }
+    if (holdMs) await sleep(holdMs);
+    await touchEnd();
+    await sleep(120);
+  }
+
+  /* ------------------------------------------------------------ setup -- */
+
+  await send('Runtime.enable');
+  await send('Page.enable');
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await send('Emulation.setEmitTouchEventsForMouse', { enabled: false });
+  await sleep(1500);
+  for (let i = 0; i < 40; i++) {
+    if (await evaluate('!!(window.PW && PW.assets && PW.assets.progress() >= 1)')) break;
+    await sleep(500);
+  }
+
+  console.log('\n— touch —');
+  check('touch capability is detected', await evaluate('PW.input.touchCapable()'));
+
+  // The boot button must still work by tap: it is plain HTML above the canvas.
+  const box = await evaluate(`(function(){
+    var r = document.getElementById('boot-go').getBoundingClientRect();
+    return JSON.stringify([r.left + r.width/2, r.top + r.height/2]);
+  })()`);
+  const [bx, by] = JSON.parse(box);
+  await tap(1, bx, by);
+  await sleep(1600);
+  check('tapping "begin" starts the game', await evaluate('!!PW.game.top()'),
+        await evaluate('PW.game.top() && PW.game.top().name'));
+
+  /* ------------------------------------------------- one-finger = OK --- */
+
+  check('title screen is up', (await evaluate('PW.game.top().name')) === 'title');
+  await tap(1);
+  check('one-finger tap confirms', (await evaluate('PW.game.top().mode')) === 'slots',
+        await evaluate('PW.game.top().mode'));
+
+  /* ------------------------------------------------ two fingers = back - */
+
+  await tap(2);
+  check('two-finger tap goes back', (await evaluate('PW.game.top().mode')) === 'title',
+        await evaluate('PW.game.top().mode'));
+
+  /* ------------------------------------------------- swipe = a cursor -- */
+
+  const before = await evaluate('PW.game.top().idx');
+  await drag(450, 260, 0, 90);
+  const after = await evaluate('PW.game.top().idx');
+  check('a downward flick moves the menu cursor', after === before + 1,
+        before + ' -> ' + after);
+
+  await drag(450, 260, 0, -90);
+  check('an upward flick moves it back', (await evaluate('PW.game.top().idx')) === before);
+
+  check('a flick is not also a tap', (await evaluate('PW.game.top().mode')) === 'title',
+        await evaluate('PW.game.top().mode'));
+
+  /* ------------------------------------------------------- in the world */
+
+  await evaluate(`(function(){
+    PW.save.reset(); PW.state.slot = 0;
+    PW.game.replace(new PW.FieldScene('hub', 'start'));
+    PW.state.chapter = 2; PW.party.add('wick');
+    PW.game.top().script.stop();
+  })()`);
+  await sleep(900);
+  check('in the field', (await evaluate('PW.game.top().name')) === 'field');
+
+  const p0 = await evaluate('JSON.stringify([PW.game.top().player.x, PW.game.top().player.y])');
+  await drag(450, 260, -110, 0, 700);          // hold left for ~0.7s
+  const p1 = await evaluate('JSON.stringify([PW.game.top().player.x, PW.game.top().player.y])');
+  const [x0] = JSON.parse(p0), [x1] = JSON.parse(p1);
+  check('holding a drag walks the party', x1 < x0 - 20,
+        Math.round(x0) + ' -> ' + Math.round(x1));
+
+  check('the direction is released on lift',
+        (await evaluate('PW.input.axisX()')) === 0 && (await evaluate('PW.input.axisY()')) === 0);
+
+  // A diagonal drag should hold two directions at once.
+  await touchStart([pt(450, 260, 0)]);
+  await touchMove([pt(380, 190, 0)]);
+  await sleep(120);
+  const diag = await evaluate('PW.input.axisX() + "," + PW.input.axisY()');
+  await touchEnd();
+  await sleep(120);
+  check('a diagonal drag holds both axes', diag === '-1,-1', diag);
+
+  /* ---------------------------------------------- three fingers = menu - */
+
+  await tap(3);
+  check('three-finger tap opens the pocket',
+        (await evaluate('PW.game.top().name')) === 'pocket',
+        await evaluate('PW.game.top().name'));
+
+  await drag(450, 260, 110, 0);
+  check('swiping changes tab', (await evaluate('PW.game.top().tab')) === 1,
+        await evaluate('PW.game.top().tab'));
+
+  await tap(2);
+  check('two-finger tap closes the pocket',
+        (await evaluate('PW.game.top().name')) === 'field',
+        await evaluate('PW.game.top().name'));
+
+  /* -------------------------------------------------------- page setup - */
+
+  // A tap on the fullscreen button must reach the DOM, not the gesture layer.
+  const fsBox = await evaluate(`(function(){
+    var e = document.getElementById('fs');
+    e.dataset.hit = '';
+    e.addEventListener('click', function(){ e.dataset.hit = 'yes'; }, { once: true });
+    var r = e.getBoundingClientRect();
+    return JSON.stringify([r.left + r.width/2, r.top + r.height/2]);
+  })()`);
+  const [fx, fy] = JSON.parse(fsBox);
+  const sceneBefore = await evaluate('PW.game.top().name');
+  await tap(1, fx, fy);
+  check('the fullscreen button still receives its tap',
+        (await evaluate("document.getElementById('fs').dataset.hit")) === 'yes');
+  check('and that tap is not also fed to the game',
+        (await evaluate('PW.game.top().name')) === sceneBefore);
+
+  check('the browser is not allowed to pan or zoom',
+        (await evaluate("getComputedStyle(document.body).touchAction")) === 'none');
+  check('a fullscreen button exists for touch',
+        await evaluate("!!document.getElementById('fs')"));
+  check('nothing threw', logs.length === 0, logs.slice(0, 3).join(' | '));
+
+  console.log('\n' + pass + '/' + (pass + fail) + ' touch checks passed');
+  ws.close();
+  chrome.kill();
+  try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 }); } catch (e) { /* */ }
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

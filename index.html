@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>PAPERWEIGHT</title>
 <meta name="description" content="A hand-drawn JRPG about the things we hold onto.">
 <meta name="theme-color" content="#0b0a14">
@@ -22,6 +22,10 @@
   <canvas id="screen" width="960" height="540"></canvas>
 </div>
 
+<!-- touch devices only; hidden by CSS everywhere else -->
+<button id="fs" aria-label="fullscreen">&#9974;</button>
+<div id="rotate">turn your phone sideways</div>
+
 <div id="boot">
   <div id="boot-inner">
     <div id="boot-title">PAPERWEIGHT</div>
@@ -29,12 +33,18 @@
     <div id="boot-bar"><div id="boot-fill"></div></div>
     <div id="boot-msg">gathering the house&hellip;</div>
     <button id="boot-go" hidden>click to begin</button>
-    <div id="boot-keys">
+    <div id="boot-keys" class="keys">
       arrow keys / WASD &mdash; move &nbsp;&middot;&nbsp;
       Z / Enter &mdash; confirm &nbsp;&middot;&nbsp;
       X / Esc &mdash; back &nbsp;&middot;&nbsp;
       C &mdash; pocket &nbsp;&middot;&nbsp;
       F &mdash; fullscreen
+    </div>
+    <div id="boot-touch" class="keys">
+      drag anywhere &mdash; move &nbsp;&middot;&nbsp;
+      tap &mdash; confirm &nbsp;&middot;&nbsp;
+      two-finger tap &mdash; back &nbsp;&middot;&nbsp;
+      three-finger tap &mdash; pocket
     </div>
   </div>
 </div>

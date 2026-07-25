@@ -20,14 +20,18 @@ the browser at runtime.
 
 ## Playing
 
-| key | does |
-| --- | --- |
-| arrow keys / WASD | walk |
-| Z / Enter / Space | talk, confirm |
-| X / Esc | back, cancel |
-| C / Shift | open your pockets |
-| F | fullscreen |
-| M | sound on/off |
+| keyboard | touch | does |
+| --- | --- | --- |
+| arrow keys / WASD | drag anywhere | walk |
+| Z / Enter / Space | tap | talk, confirm |
+| X / Esc | two-finger tap | back, cancel |
+| C / Shift | three-finger tap | open your pockets |
+| F | button, bottom right | fullscreen |
+| M | — | sound on/off |
+
+On touch, a drag is a thumbstick that follows your finger rather than a fixed
+pad: hold it to keep walking, flick it to nudge a menu cursor one step. The
+on-screen help changes to match whichever you are using.
 
 The game saves to three slots in `localStorage`, and writes automatically at
 each chapter break and whenever you sit down on the rug in the Hall of Doors.
@@ -124,6 +128,11 @@ through a tape-wobble delay, a low-pass and a generated convolution reverb, and 
 single `tension` knob darkens all of it when the game wants you uncomfortable.
 Twenty-two sound effects are built the same way. There are no audio files.
 
+**Input** is one layer. Touch gestures synthesise the same virtual keys the
+keyboard produces, so not one scene knows or cares which is in use — dragging
+past a dead zone presses a direction, letting go releases it, and menu
+auto-repeat therefore behaves identically either way.
+
 **Cutscenes** are arrays of `[op, ...args]` interpreted by `PW.Script` —
 `say`, `narrate`, `choice`, `battle`, `goroom`, `give`, `flag`, and so on — which
 is why the story files read as prose with brackets round it.
@@ -161,6 +170,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 node tools/smoke.js           # 58 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
 node tools/paths.js           # 24 checks: endings, every skill, every item
+node tools/touch.js           # 20 checks: gestures, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 ```
 
@@ -172,6 +182,12 @@ asserts nothing threw and no artwork was missing. It also proves every door lead
 somewhere real, every spawn point stands on a floor, every interactive object can
 actually be reached, nothing lurks on top of a doorway, and every note in every
 song lands in the audible range.
+
+`touch.js` turns on Chrome's touch emulation and sends genuine
+touchstart/move/end sequences: it taps with one, two and three fingers, flicks
+a menu cursor, holds a drag and checks the party actually walked, checks a
+diagonal holds both axes, and checks a tap on the fullscreen button reaches the
+DOM instead of being eaten as a gesture.
 
 `shots.js` drives an actual browser over the DevTools protocol and writes
 `shots/*.png` from the live canvas — the check a fake DOM cannot make.

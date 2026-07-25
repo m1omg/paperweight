@@ -39,6 +39,7 @@
         : 'ready';
 
       // The browser will not make a sound until the player has touched something.
+      if (PW.input.touchCapable()) go.textContent = 'tap to begin';
       go.hidden = false;
       go.focus();
 

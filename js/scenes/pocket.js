@@ -126,7 +126,10 @@ PW.PocketScene.prototype = {
     else if (this.tab === 1) this.drawPockets(ctx, x, y, w, h);
     else this.drawKept(ctx, x, y, w, h);
 
-    D.text(ctx, 'C or X to close   \u2190\u2192 tabs', x + w - 34, y + h - 30, {
+    var close = PW.input.touchCapable()
+      ? 'two-finger tap to close   swipe for tabs'
+      : 'C or X to close   \u2190\u2192 tabs';
+    D.text(ctx, close, x + w - 34, y + h - 30, {
       size: 14, align: 'right', color: '#8c81a4', shadow: false
     });
 
