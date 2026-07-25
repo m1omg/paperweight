@@ -1,0 +1,142 @@
+/* PAPERWEIGHT — the paths tools/smoke.js does not take.
+ *
+ * Endings, every skill, every item, the mood triangle, a party wipe, saving,
+ * and the waking-world chapter. Run with:  node tools/paths.js
+ */
+'use strict';
+const H = require('./smoke.js');
+const {PW, tick, run, until, top, errors} = H;
+let pass=0, fail=0;
+const ck=(n,ok,d)=>{ ok?pass++:fail++; console.log((ok?'  ok   ':'  FAIL ')+n+(d?'  — '+d:'')); };
+
+// --- ending selection logic ---
+function endingFor(soothed, putDown, house){
+  PW.save.reset();
+  PW.state.flags.soothed_count = soothed;
+  PW.state.flags.put_down = putDown;
+  PW.flag('soothed_the_house', house);
+  return PW.pickEnding();
+}
+ck('fight everything -> HELD ON', endingFor(0,0,false)==='held_on', endingFor(0,0,false));
+ck('settle a lot -> SET DOWN', endingFor(5,0,false)==='set_down', endingFor(5,0,false));
+ck('hold the house only -> SET DOWN', endingFor(0,0,true)==='set_down', endingFor(0,0,true));
+ck('hold + let go -> KEEP GOING', endingFor(2,1,true)==='keep_going', endingFor(2,1,true));
+
+// each ending scene renders start to finish
+['held_on','set_down','keep_going'].forEach(id=>{
+  PW.save.reset();
+  const before = errors.length;
+  PW.game.start(new PW.EndingScene(id));
+  for(let i=0;i<1400;i++) tick(i%4===0?'ok':null);
+  ck('ending "'+id+'" plays through', errors.length===before, errors.slice(before)[0]);
+});
+
+// --- battle mechanics ---
+PW.save.reset();
+['wick','dell','hal'].forEach(x=>PW.party.add(x));
+PW.state.party.forEach(id=>{ PW.party.rec(id).lv = 9; const s=PW.party.stats(id); PW.party.rec(id).hp=s.maxhp; PW.party.rec(id).bp=s.maxbp; });
+PW.items.give('jam',5); PW.items.give('pencil',3); PW.items.give('crane',2);
+PW.game.start(new PW.FieldScene('hub','start'));
+until(()=>top().name==='field'&&!top().script.running,'ok',600);
+
+// every skill of every character, cast in a real fight
+const allSkills = [];
+PW.state.party.forEach(id => PW.party.skillsOf(id).forEach(s=>allSkills.push([id,s])));
+ck('everyone has learned several skills', allSkills.length >= 14, allSkills.length+' skills');
+
+let castErrors = 0;
+allSkills.forEach(([id, sk])=>{
+  const before = errors.length;
+  PW.game.push(new PW.BattleScene('hub_c',{}));
+  const b = top();
+  const actor = b.party.find(p=>p.id===id);
+  const skill = PW.skills.get(sk);
+  actor.bp = 999;
+  try {
+    b.doSkill(actor, skill, skill.target==='enemy'||skill.target==='allEnemies' ? b.foes[0] : b.party[0]);
+    for(let i=0;i<10;i++) tick();
+  } catch(e){ castErrors++; console.log('    cast '+sk+': '+e.message); }
+  if (errors.length>before) { castErrors++; console.log('    render after '+sk+': '+errors[before]); }
+  PW.game.pop();
+});
+ck('every skill can be cast and drawn', castErrors===0, castErrors+' failures');
+
+// every item usable in battle
+PW.game.push(new PW.BattleScene('hub_c',{}));
+let itemErrors=0;
+Object.keys(PW.items.all).forEach(id=>{
+  const it = PW.items.get(id);
+  if (!it.target) return;
+  PW.items.give(id);
+  const b = top();
+  try { b.doItem(b.party[0], it, id, it.target==='enemy'?b.foes[0]:b.party[0]); for(let i=0;i<6;i++) tick(); }
+  catch(e){ itemErrors++; console.log('    '+id+': '+e.message); }
+});
+ck('every usable item works in battle', itemErrors===0, itemErrors+' failures');
+PW.game.pop();
+
+// mood triangle maths
+const M=PW.moods;
+const t={id:'tender',lvl:1}, f={id:'frayed',lvl:1}, d={id:'distant',lvl:1}, s=M.blank();
+ck('tender beats frayed', M.mult(t,f)===1.5);
+ck('frayed beats distant', M.mult(f,d)===1.5);
+ck('distant beats tender', M.mult(d,t)===1.5);
+ck('and each loses the other way', M.mult(f,t)===0.7 && M.mult(d,f)===0.7 && M.mult(t,d)===0.7);
+ck('steady is neutral both ways', M.mult(s,t)===1 && M.mult(t,s)===1);
+const m={id:'tender',lvl:2};
+M.shift(m,'frayed',1);
+ck('a different feeling cools you first', m.id==='tender'&&m.lvl===1, m.id+':'+m.lvl);
+M.shift(m,'frayed',1); M.shift(m,'frayed',1);
+ck('then it can take hold', m.id==='frayed'&&m.lvl===1, m.id+':'+m.lvl);
+
+// fleeing, and a party wipe that offers to get up
+PW.save.reset();
+PW.game.start(new PW.FieldScene('hub','start'));
+until(()=>!top().script.running,'ok',600);
+PW.game.push(new PW.BattleScene('hub_a',{}));
+let b=top(); b.party.forEach(p=>{p.hp=1;});
+b.foes.forEach(x=>{x.atk=999;});
+until(()=>top().name!=='battle'||top().result,'ok',3000);
+ck('a party wipe is survivable', top().name==='battle' && top().result==='lose', top().result);
+until(()=>top().box.choices,'ok',600);
+// one press finishes the typing, the next picks "Get up."
+until(()=>!top().result,'ok',300); run(20);
+ck('"get up" restarts the fight', top().name==='battle' && !top().result &&
+   top().party.every(p=>p.hp>1),
+   top().name+' '+top().result+' hp='+top().party.map(p=>p.hp).join(','));
+
+// saving and loading round-trips
+PW.save.reset();
+PW.state.chapter=3; PW.state.room='garden'; PW.party.add('dell'); PW.items.give('crown');
+PW.flag('test_flag', true);
+const wrote = PW.save.write(1);
+PW.save.reset();
+const read = PW.save.load(1);
+ck('a save can be written and read back', wrote && read &&
+   PW.state.chapter===3 && PW.state.room==='garden' &&
+   PW.party.has('dell') && PW.items.has('crown') && PW.flag('test_flag'));
+
+// the real-world interlude branch
+PW.save.reset();
+PW.flag('tutorial_done',true); PW.flag('ch_interlude',true); PW.flag('can_sleep',true);
+PW.game.start(new PW.FieldScene('landing','frombedroom'));
+until(()=>!top().script.running&&!PW.game.busy(),'ok',600);
+function use(id){ until(()=>top().name==='field'&&!top().script.running&&!top().box.active&&!PW.game.busy(),null,600);
+  const sc=top(); const e=sc.entities.find(x=>x.id===id); if(!e||!e.visible) return false;
+  sc.player.x=e.x; sc.player.y=Math.min(e.y+26,520);
+  if(!sc.canStand(sc.player.x,sc.player.y)){const w=sc.room.walk[sc.room.walk.length-1];sc.player.y=w[1]+w[3]-8;}
+  sc.player.dir=sc.player.y>e.y?'up':'down'; run(2); tick('ok'); run(4); return true; }
+use('nelsdoor'); until(()=>top().box.choices,'ok',600); tick('ok'); run(6);
+until(()=>!top().script.running,'ok',900);
+ck('her door in the real world can be approached', PW.flag('tried_door'));
+use('stairs'); until(()=>PW.state.room==='street',null,500);
+ck('the street exists', PW.state.room==='street', PW.state.room);
+use('dell_real'); until(()=>!top().script.running,'ok',1200);
+ck('Dell can be met in the waking world', PW.flag('talked_dell_real'));
+use('shop'); until(()=>top().box.choices,'ok',600); tick('ok'); run(6);
+until(()=>!top().script.running,'ok',900);
+ck('the shop scene plays', PW.flag('stood_at_shop'));
+
+console.log('\n'+pass+'/'+(pass+fail)+' alternate-path checks passed'+(errors.length?', '+errors.length+' runtime errors':''));
+if (errors.length) [...new Set(errors)].slice(0,8).forEach(e=>console.log('  '+e));
+process.exit(fail||errors.length?1:0);

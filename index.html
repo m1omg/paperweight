@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAPERWEIGHT</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="screen" width="960" height="540"></canvas>
+</div>
+
+<div id="boot">
+  <div id="boot-inner">
+    <div id="boot-title">PAPERWEIGHT</div>
+    <div id="boot-sub">a small game about the things we hold onto</div>
+    <div id="boot-bar"><div id="boot-fill"></div></div>
+    <div id="boot-msg">gathering the house&hellip;</div>
+    <button id="boot-go" hidden>click to begin</button>
+    <div id="boot-keys">
+      arrow keys / WASD &mdash; move &nbsp;&middot;&nbsp;
+      Z / Enter &mdash; confirm &nbsp;&middot;&nbsp;
+      X / Esc &mdash; back &nbsp;&middot;&nbsp;
+      C &mdash; pocket &nbsp;&middot;&nbsp;
+      F &mdash; fullscreen
+    </div>
+  </div>
+</div>
+
+<!-- engine ------------------------------------------------------------- -->
+<script src="js/engine/util.js"></script>
+<script src="js/engine/input.js"></script>
+<script src="js/engine/assets.js"></script>
+<script src="js/engine/draw.js"></script>
+<script src="js/engine/audio.js"></script>
+<script src="js/engine/save.js"></script>
+<script src="js/engine/game.js"></script>
+
+<!-- data --------------------------------------------------------------- -->
+<script src="js/data/music.js"></script>
+<script src="js/data/moods.js"></script>
+<script src="js/data/items.js"></script>
+<script src="js/data/actors.js"></script>
+<script src="js/data/enemies.js"></script>
+<script src="js/data/rooms.js"></script>
+<script src="js/data/script_prologue.js"></script>
+<script src="js/data/script_dream.js"></script>
+<script src="js/data/script_kitchen.js"></script>
+<script src="js/data/script_garden.js"></script>
+<script src="js/data/script_attic.js"></script>
+<script src="js/data/script_final.js"></script>
+
+<!-- scenes ------------------------------------------------------------- -->
+<script src="js/scenes/scene.js"></script>
+<script src="js/scenes/title.js"></script>
+<script src="js/scenes/field.js"></script>
+<script src="js/scenes/battle.js"></script>
+<script src="js/scenes/pocket.js"></script>
+<script src="js/scenes/ending.js"></script>
+
+<script src="js/main.js"></script>
+</body>
+</html>
