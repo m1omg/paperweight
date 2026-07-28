@@ -27,7 +27,8 @@ PW.actors = (function () {
       lean: 'tender',
       float: true,
       skills: ['warm_up', 'remember_when'],
-      learn: { 3: 'little_light', 5: 'shelter', 8: 'rekindle', 11: 'oldest_song' }
+      learn: { 3: 'little_light', 4: 'say_their_name', 5: 'shelter',
+               8: 'rekindle', 11: 'oldest_song' }
     },
 
     /* ==================================================================== */
@@ -94,9 +95,11 @@ PW.skills = (function () {
     },
     keep: {
       name: 'Keep', cost: 16, target: 'enemy', icon: 'o',
-      desc: 'Hold a thing still in your two hands so it cannot go anywhere.',
+      desc: 'Hold a thing still in your two hands so it cannot go anywhere. ' +
+            'It is the same grip either way — whether you are stopping it or ' +
+            'keeping it is a thing you decide afterwards.',
       line: '{u} holds {t} still.',
-      stun: 1, power: 0.4, sfx: 'chime', anim: 'hold'
+      stun: 1, power: 0.4, settle: 1, sfx: 'chime', anim: 'hold'
     },
     dont_go: {
       name: "Don't Go", cost: 24, target: 'allAllies', icon: '*',
@@ -123,6 +126,13 @@ PW.skills = (function () {
       desc: 'Say a true thing about someone. It opens them up, for better and worse.',
       line: '{u} remembers something out loud.',
       moodTarget: { id: 'tender', amt: 1, force: true }, bp: 14, sfx: 'chime', anim: 'memory'
+    },
+    say_their_name: {
+      name: 'Say Their Name', cost: 8, target: 'enemy', icon: '~',
+      desc: 'Call a thing what it used to be, back when it belonged to ' +
+            'somebody. Most things soften at the sound of it.',
+      line: '{u} calls {t} by its old name.',
+      moodTarget: { id: 'tender', amt: 1, force: true }, sfx: 'chime', anim: 'memory'
     },
     shelter: {
       name: 'Shelter', cost: 9, target: 'allAllies', icon: '#',
@@ -224,9 +234,60 @@ PW.skills = (function () {
   };
 
   for (var k in S) S[k].id = k;
+
+  var WHO = {
+    self: 'you', ally: 'one of you', allAllies: 'everyone',
+    enemy: 'one of them', allEnemies: 'all of them', downed: 'someone who fell'
+  };
+
+  /* What a skill actually does, written out of the skill itself.
+     The `desc` is what it feels like to do it and stays that way; this is the
+     line that answers "and what does that get me". Deriving it means the two
+     can never disagree after somebody tunes a number. */
+  function effectOf(sk) {
+    if (!sk) return '';
+    var out = [];
+    if (sk.reviveAll) out.push('everyone who fell gets up');
+    if (sk.revive) out.push('gets them up again');
+    if (sk.power) {
+      out.push('hurts' + (sk.power >= 2 ? ' badly' : sk.power <= 0.6 ? ' a little' : ''));
+      if (sk.hits > 1) out[out.length - 1] += ' ' + sk.hits + ' times';
+    }
+    if (sk.healFrac) out.push('mends ' + Math.round(sk.healFrac * 100) + '%');
+    if (sk.bp) out.push(sk.bp + ' breath back');
+    if (sk.shield) out.push('shields');
+    if (sk.settle) out.push('settles a held thing further');
+    if (sk.buff) {
+      var b = [];
+      if (sk.buff.atk) b.push('hits harder');
+      if (sk.buff.def) b.push('harder to hurt');
+      out.push(b.join(' and ') + ' for ' + sk.buff.turns + ' turns');
+    }
+    if (sk.debuff) {
+      var d = [];
+      if (sk.debuff.atk) d.push('weaker');
+      if (sk.debuff.spd) d.push('slower');
+      out.push('leaves them ' + d.join(' and ') + ' for ' + sk.debuff.turns + ' turns');
+    }
+    if (sk.dot) out.push('keeps hurting for ' + sk.dot.turns + ' turns');
+    if (sk.stun) out.push('holds them still a turn');
+    if (sk.strip) out.push('undoes what they were holding on to');
+    if (sk.link) out.push('ties them together, so they share it');
+    if (sk.taunt) out.push('they come for you instead');
+    var mood = sk.moodTarget || sk.moodTargetAll;
+    if (mood) out.push('leaves them ' + mood.id);
+    if (sk.moodSelf) out.push('leaves you ' + sk.moodSelf.id);
+    if (sk.recoil) out.push('costs you ' + Math.round(sk.recoil * 100) + '% of yourself');
+
+    var line = out.join(', ');
+    if (!line) return '';
+    return WHO[sk.target] + ': ' + line + (sk.once ? '. Once a fight.' : '');
+  }
+
   return {
     all: S,
-    get: function (id) { return S[id] || null; }
+    get: function (id) { return S[id] || null; },
+    effect: effectOf
   };
 })();
 

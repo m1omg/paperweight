@@ -23,6 +23,17 @@ PW.FieldScene.FOLLOW_GAP = 40;    // pixels of trail between party members
 PW.FieldScene.REACH = 96;         // how far the player's arm goes, in pixels
 PW.FieldScene.AIM = 0.34;         // how squarely they must face it (~70 degrees)
 
+/* Roaming things. The player walks at 168, so a chase at 104 is one you can
+   always get out of by turning round and going — which is the point. Being
+   caught should be the price of walking past something, not of existing in
+   the same room as it. */
+PW.FieldScene.SIGHT = 205;        // how far away it notices you
+PW.FieldScene.LOSE = 330;         // ...and how far you must get to be forgotten
+PW.FieldScene.DRIFT = 26;         // idle speed, mooching about
+PW.FieldScene.CHASE = 104;        // speed once it has seen you
+PW.FieldScene.NOTICE = 0.4;       // seconds it stops dead before starting after you
+PW.FieldScene.TOUCH = 34;         // how close it has to get to start a fight
+
 PW.FieldScene.DIRV = {
   up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0]
 };
@@ -110,7 +121,8 @@ PW.FieldScene.prototype = {
       self.foes.push({
         def: f, x: f.x, y: f.y, hx: f.x, hy: f.y,
         vx: PW.util.rand(-1, 1), vy: PW.util.rand(-1, 1),
-        t: Math.random() * 6.28, cool: 0
+        t: Math.random() * 6.28, cool: 0,
+        chasing: false, notice: 0
       });
     });
   },
@@ -235,36 +247,63 @@ PW.FieldScene.prototype = {
     return this.trail[this.trail.length - 1];
   },
 
+  /* Roaming things mooch about their own patch until they notice you, and then
+     they come. The noticing is deliberately a beat of its own — it stops, it
+     hangs there for a moment, and only then does it start moving — because a
+     thing that simply began drifting at you slightly faster read, on screen,
+     as no change at all. */
   updateFoes: function (dt, frozen) {
     var p = this.player;
+    var F = PW.FieldScene;
     if (this.grace > 0) this.grace -= dt;
+
     for (var i = 0; i < this.foes.length; i++) {
       var f = this.foes[i];
       f.t += dt;
       if (f.cool > 0) f.cool -= dt;
+      if (frozen || this.grace > 0) continue;
 
-      if (!frozen && this.grace <= 0) {
-        // A slow drift around home, with a nudge toward the player when near.
-        var toP = PW.util.dist(f.x, f.y, p.x, p.y);
-        var wanderX = Math.cos(f.t * 0.7 + f.def.x) * 26;
-        var wanderY = Math.sin(f.t * 0.55 + f.def.y) * 20;
-        var tx = f.hx + wanderX, ty = f.hy + wanderY;
-        if (toP < 150) { tx = tx * 0.35 + p.x * 0.65; ty = ty * 0.35 + p.y * 0.65; }
-        var sp = (toP < 150 ? 52 : 26) * dt;
-        var dx = tx - f.x, dy = ty - f.y;
-        var m = Math.sqrt(dx * dx + dy * dy) || 1;
-        var nx = f.x + (dx / m) * sp, ny = f.y + (dy / m) * sp;
-        if (this.canStand(nx, ny)) { f.x = nx; f.y = ny; }
-        else if (PW.util.dist(f.x, f.y, f.hx, f.hy) > 4) {
-          f.hx = f.def.x; f.hy = f.def.y;
-        }
+      var toP = PW.util.dist(f.x, f.y, p.x, p.y);
 
-        if (toP < 30 && f.cool <= 0 && !PW.game.busy()) {
-          this.beginEncounter(f);
-          return;
-        }
+      if (!f.chasing && f.cool <= 0 && toP < F.SIGHT) {
+        f.chasing = true;
+        f.notice = F.NOTICE;
+        PW.audio.sfx('blip_low');
+      } else if (f.chasing && toP > F.LOSE) {
+        f.chasing = false;
+      }
+
+      if (f.notice > 0) { f.notice -= dt; continue; }
+
+      if (f.chasing) {
+        this.stepFoe(f, p.x, p.y, F.CHASE * dt);
+      } else {
+        // Back to its own patch, by way of a wander that never quite repeats.
+        this.stepFoe(f,
+          f.hx + Math.cos(f.t * 0.7 + f.def.x) * 26,
+          f.hy + Math.sin(f.t * 0.55 + f.def.y) * 20,
+          F.DRIFT * dt);
+      }
+
+      if (toP < F.TOUCH && f.cool <= 0 && !PW.game.busy()) {
+        this.beginEncounter(f);
+        return;
       }
     }
+  },
+
+  /* Walk a roaming thing toward a point, sliding along whatever it bumps into
+     instead of sticking to it — the same rule the player moves by, so nothing
+     ever gets wedged on a corner of the furniture and gives up chasing. */
+  stepFoe: function (f, tx, ty, step) {
+    var dx = tx - f.x, dy = ty - f.y;
+    var m = Math.sqrt(dx * dx + dy * dy);
+    if (m < 1) return;
+    dx = (dx / m) * step;
+    dy = (dy / m) * step;
+    if (this.canStand(f.x + dx, f.y + dy)) { f.x += dx; f.y += dy; }
+    else if (this.canStand(f.x + dx, f.y)) { f.x += dx; }
+    else if (this.canStand(f.x, f.y + dy)) { f.y += dy; }
   },
 
   /* ------------------------------------------------------ interaction -- */
@@ -438,7 +477,9 @@ PW.FieldScene.prototype = {
     var r = this.room;
     if (!r) return;
 
-    D.cover(ctx, PW.assets.img(r.bg), PW.W, PW.H);
+    // A room's `bg` may be a function, for rooms whose art changes with the
+    // story — see the hall in js/data/rooms.js.
+    D.cover(ctx, PW.assets.img(PW.roomBg(r)), PW.W, PW.H);
     if (r.tint) { ctx.fillStyle = r.tint; ctx.fillRect(0, 0, PW.W, PW.H); }
 
     // Everything that stands on the floor is sorted by its feet.
@@ -523,13 +564,29 @@ PW.FieldScene.prototype = {
 
   drawFoe: function (ctx, f) {
     var img = PW.assets.img(f.def.sprite);
-    var bob = Math.sin(f.t * 2.6) * 5;
     var s = f.def.scale * (0.9 + 0.2 * PW.util.clamp((f.y - 300) / 240, 0, 1));
+    // Mooching about it lolls; once it has seen you it bobs quickly and holds
+    // itself upright, so you can tell across the room which one is coming.
+    var bob = Math.sin(f.t * (f.chasing ? 6.5 : 2.6)) * (f.chasing ? 7 : 5);
+    var rot = Math.sin(f.t * 1.4) * (f.chasing ? 0.02 : 0.06);
+
+    if (f.notice > 0) {
+      // The moment it notices: it stops dead and draws itself up.
+      bob = -10 * (f.notice / PW.FieldScene.NOTICE);
+      rot = 0;
+    }
+
     this.shadow(ctx, f.x, f.y, s * 2.4, 0.24);
     ctx.save();
     ctx.globalAlpha = 0.92;
-    PW.draw.sprite(ctx, img, f.x, f.y + bob, s, { rot: Math.sin(f.t * 1.4) * 0.06 });
+    PW.draw.sprite(ctx, img, f.x, f.y + bob, s, { rot: rot });
     ctx.restore();
+
+    if (f.notice > 0) {
+      PW.draw.text(ctx, '!', f.x, f.y - img.height * s - 26, {
+        size: 30, align: 'center', color: '#ffd166'
+      });
+    }
   },
 
   drawInteractHint: function (ctx) {

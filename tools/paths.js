@@ -116,6 +116,50 @@ ck('a save can be written and read back', wrote && read &&
    PW.state.chapter===3 && PW.state.room==='garden' &&
    PW.party.has('dell') && PW.items.has('crown') && PW.flag('test_flag'));
 
+/* --- saves must survive the game changing underneath them -----------------
+ *
+ * Somebody is always mid-playthrough. A save written by any build has to load
+ * in any other, in both directions, so the rule is: newState() is the whole
+ * shape of a save, load() back-fills anything an older one lacks, and nothing
+ * anywhere else invents a field. These checks are what stop that drifting —
+ * `pocket` was conjured into PW.state by items.js for a long time without ever
+ * appearing in the template, which worked purely by luck.
+ */
+PW.save.reset();
+const TEMPLATE = Object.keys(PW.state).sort();
+
+// Play a save as hard as the game can: party, pockets, memories, counters.
+PW.state.chapter = 5;
+['wick','dell','hal'].forEach(id=>PW.party.add(id));
+PW.items.give('sock'); PW.items.give('crown'); PW.items.give('marble');
+PW.flag('soothed_lily', true); PW.counter('soothed_count', 2);
+const strays = Object.keys(PW.state).filter(k=>TEMPLATE.indexOf(k)<0 && k!=='savedAt');
+ck('play invents no field newState() does not declare', strays.length===0, strays.join(', '));
+
+// The blob has to stay plain JSON — rooms.js now holds a function for the
+// hall's art, and a function reaching PW.state would break every old build.
+let blob=null; try { blob = JSON.stringify(PW.state); } catch(e) { blob = null; }
+ck('a save is still plain JSON', !!blob && JSON.parse(blob) && blob.indexOf('function')<0);
+
+// ...and a save from before any of today's fields existed still has to load.
+const older = { version:1, chapter:5, flags:{beat_lily:true}, party:['june','wick'],
+  actors:{ june:{id:'june',lv:6,xp:3,hp:60,bp:30,skills:['steady_breath','say_it']},
+           wick:{id:'wick',lv:6,xp:3,hp:45,bp:50,skills:['warm_up','remember_when']} },
+  kept:['paperweight'], keptMax:5, room:'hub', spawn:'start', facing:'down',
+  playtime:900, steps:4000, battlesWon:7, endingSeen:null };
+PW.state = JSON.parse(JSON.stringify(older));
+PW.save.reset.call(PW.save);                       // grab a fresh template...
+const blank = PW.state;
+PW.state = JSON.parse(JSON.stringify(older));      // ...then back-fill like load()
+for (const k in blank) if (PW.state[k]===undefined) PW.state[k] = blank[k];
+ck('a save with fields missing still loads',
+   PW.state.chapter===5 && PW.party.has('wick') && PW.items.count('sock')===0);
+ck('an old save picks up art added since', PW.roomBg(PW.rooms.hub)==='bg_hub_bare',
+   PW.roomBg(PW.rooms.hub));
+ck('an old actor picks up skills added since',
+   PW.party.skillsOf('wick').indexOf('say_their_name')>=0,
+   PW.party.skillsOf('wick').join(', '));
+
 // the real-world interlude branch
 PW.save.reset();
 PW.flag('tutorial_done',true); PW.flag('ch_interlude',true); PW.flag('can_sleep',true);

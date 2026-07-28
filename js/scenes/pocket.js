@@ -252,7 +252,11 @@ PW.PocketScene.prototype = {
       D.sprite(ctx, icon, x + 46, ry + 40, is);
       D.text(ctx, item.name, x + 80, ry + 4, { size: 20, color: '#33294a', shadow: false });
       D.text(ctx, 'x' + PW.items.count(id), x + 320, ry + 6, { size: 17, color: '#6b5f86', shadow: false });
-      D.text(ctx, item.desc, x + 380, ry + 8, { size: 14, color: '#7a6f94', shadow: false });
+      D.text(ctx, item.desc, x + 380, ry - 2, { size: 14, color: '#7a6f94', shadow: false });
+      // Knowing what it is does not tell you when to reach for it.
+      D.text(ctx, PW.items.effect(item), x + 380, ry + 18, {
+        size: 14, color: '#8a6a2f', shadow: false
+      });
     }
   },
 
@@ -260,7 +264,7 @@ PW.PocketScene.prototype = {
     var D = PW.draw;
     var list = PW.state.kept;
 
-    D.text(ctx, 'you can carry ' + PW.state.keptMax + ' of these',
+    D.text(ctx, 'memories. you can carry ' + PW.state.keptMax + ' of them',
       x + w - 22, y + 62, { size: 15, align: 'right', color: '#8a7fa8', shadow: false });
 
     for (var i = 0; i < PW.state.keptMax; i++) {
@@ -284,9 +288,22 @@ PW.PocketScene.prototype = {
       var is = Math.min(46 / icon.width, 46 / icon.height);
       D.sprite(ctx, icon, x + 60, ry + 56, is);
       D.text(ctx, item.name, x + 96, ry + 8, { size: 20, color: '#33294a', shadow: false });
-      D.textBlock(ctx, item.memory || item.desc, x + 96, ry + 32, w - 180, {
-        size: 14, color: '#6b5f86', shadow: false, lineHeight: 17
+      // The memory is the thing itself, not a description of the object, so it
+      // is marked as one rather than left to look like a second subtitle.
+      if (item.memory) {
+        D.text(ctx, 'you remember', x + 96, ry + 32, {
+          size: 12, color: '#a5601f', shadow: false
+        });
+      }
+      // A memory is still a thing you can reach for mid-fight, so it says what
+      // that does — the same line the pockets tab gives a jar of jam.
+      D.text(ctx, PW.items.effect(item), x + w - 44, ry + 32, {
+        size: 13, align: 'right', color: '#8a6a2f', shadow: false
       });
+      D.textBlock(ctx, item.memory || item.desc, x + 96,
+        ry + (item.memory ? 46 : 32), w - 180, {
+          size: 14, color: '#6b5f86', shadow: false, lineHeight: 17
+        });
       if (item.fixed) {
         D.text(ctx, 'stays', x + w - 44, ry + 8, {
           size: 14, align: 'right', color: '#8a7fa8', shadow: false

@@ -39,6 +39,13 @@ to be highlighted. The on-screen help changes to match whichever you are using.
 The game saves to three slots in `localStorage`, and writes automatically at
 each chapter break and whenever you sit down on the rug in the Hall of Doors.
 
+**A save is meant to keep working.** Somebody is always mid-playthrough, so a
+save written by any version loads in any other, in both directions — a newer
+build fills in whatever an older save has not heard of, and never writes
+anything that would confuse an older one. Nothing gets invalidated by an
+update, and there is no "your save is from an old version" screen, because
+there is not going to be one.
+
 ---
 
 ## What it is
@@ -193,7 +200,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 ```
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
-node tools/paths.js           # 24 checks: endings, every skill, every item
+node tools/paths.js           # 29 checks: endings, skills, items, save compatibility
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 python3 tools/boxes.py        # every room's boxes drawn over its painting
@@ -207,6 +214,12 @@ asserts nothing threw and no artwork was missing. It also proves every door lead
 somewhere real, every spawn point stands on a floor, every interactive object can
 actually be reached, nothing lurks on top of a doorway, and every note in every
 song lands in the audible range.
+
+`paths.js` covers what a single playthrough cannot: all three endings, every
+skill cast, every item used, the mood triangle in both directions, a party
+wipe, and **save compatibility** — that a save is still plain JSON, that play
+never invents a field the template does not declare, and that a save missing
+today's fields entirely still loads and picks up whatever has been added since.
 
 `touch.js` turns on Chrome's touch emulation and sends genuine
 touchstart/move/end sequences: it taps with one, two and three fingers, flicks

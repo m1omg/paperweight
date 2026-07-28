@@ -722,6 +722,9 @@ PW.BattleScene.prototype = {
       if (sk.strip) { tg.buffs = []; self.float(tg, 'undone', '#ffd0c0'); }
       if (sk.moodTarget) self.moodShift(tg, sk.moodTarget);
       if (sk.moodTargetAll) self.moodShift(tg, sk.moodTargetAll);
+      // Mood first, then settling, so a skill that does both gets the benefit
+      // of the mood it has just put them in.
+      if (sk.settle && tg.side === 'foe' && tg.who.soothe) self.settle(tg, sk.settle);
     });
 
     if (sk.link) {
@@ -751,17 +754,47 @@ PW.BattleScene.prototype = {
     }
 
     // Holding a monster.
-    var s = target.who.soothe;
-    if (!s) {
+    if (!target.who.soothe) {
       this.float(target, 'no', '#cfc7e0');
       this.say(target.name + ' does not want to be held.', 1.1);
       PW.audio.sfx('error');
       this.together = Math.min(100, this.together + 6);
       return;
     }
-    target.soothed++;
     this.together = Math.min(100, this.together + 14);
+    this.settle(target, 1, true);
+  },
+
+  /* Push a thing further toward being put down.
+   *
+   * How far one hold gets you depends on how the thing is feeling, which is
+   * the rest of the game finally mattering here too: something TENDER has
+   * already half let you in and settles twice as fast, and something FRAYED is
+   * too angry to hear it — the hold still counts, but mostly it takes the edge
+   * off, which is what makes the next one land properly. So the way to settle
+   * a difficult thing is to work on its mood first, exactly as it is with
+   * everything else in this game.
+   */
+  settle: function (target, amount, spoken) {
+    var s = target.who.soothe;
+    if (!s) return;
+
+    var mood = target.mood;
+    var gain = amount;
+    var note = 'settling';
+    if (mood.id === 'tender' && mood.lvl > 0) {
+      gain = amount * 2;
+      note = 'listening';
+    } else if (mood.id === 'frayed' && mood.lvl > 0) {
+      // Still counts — you do not stop holding something because it is angry —
+      // but most of what the hold does is take the anger out of it.
+      PW.moods.shift(mood, 'steady', 1);
+      note = 'easing';
+    }
+
+    target.soothed = Math.min(s.turns, target.soothed + gain);
     PW.audio.sfx('chime');
+
     if (target.soothed >= s.turns) {
       target.settled = true;
       target.alive = false;
@@ -770,9 +803,14 @@ PW.BattleScene.prototype = {
       PW.game.flash('#ffe9c4', 0.35, 0.5);
       if (s.drop && PW.items.get(s.drop)) PW.items.give(s.drop);
       this.layoutFoes();
-    } else {
-      this.float(target, 'settling', '#ffd9e2');
-      this.say(target.name + ' is not sure about this yet.', 1.0);
+      return;
+    }
+
+    this.float(target, note, '#ffd9e2');
+    if (spoken) {
+      this.say(note === 'easing'
+        ? target.name + ' does not soften. Some of the anger goes out of it anyway.'
+        : target.name + ' is not sure about this yet.', 1.0);
     }
   },
 
@@ -1113,8 +1151,10 @@ PW.BattleScene.prototype = {
       ctx.drawImage(img, f.x + w / 2 - 4, y - 24, 26, 26);
       ctx.restore();
     }
-    if (f.soothed > 0) {
-      for (var i = 0; i < (f.who.soothe ? f.who.soothe.turns : 0); i++) {
+    // How much holding this one would take, shown from the first turn rather
+    // than only once you have already guessed right and started.
+    if (f.who.soothe) {
+      for (var i = 0; i < f.who.soothe.turns; i++) {
         ctx.fillStyle = i < f.soothed ? '#e79ab0' : 'rgba(230,220,240,.28)';
         ctx.beginPath();
         ctx.arc(f.x - w / 2 - 14, y - 4 - i * 11, 4, 0, 6.2832);
@@ -1329,9 +1369,17 @@ PW.BattleScene.prototype = {
       }
     }
 
-    var desc = kind === 'skill'
-      ? (PW.skills.get(list[m.idx]) || {}).desc
-      : (list[m.idx] || {}).item.desc;
+    var desc, effect;
+    if (kind === 'skill') {
+      var pick = PW.skills.get(list[m.idx]) || {};
+      desc = pick.desc;
+      effect = PW.skills.effect(pick);
+    } else {
+      var ent = list[m.idx] || {};
+      desc = ent.item && ent.item.desc;
+      effect = ent.item ? PW.items.effect(ent.item) : '';
+    }
+
     ctx.save();
     ctx.strokeStyle = 'rgba(58,48,80,.3)';
     ctx.beginPath(); ctx.moveTo(x + 18, y + h - 66); ctx.lineTo(x + w - 18, y + h - 66); ctx.stroke();
@@ -1339,6 +1387,12 @@ PW.BattleScene.prototype = {
     D.textBlock(ctx, desc || '', x + 22, y + h - 58, w - 44, {
       size: 16, color: '#5a4f74', shadow: false, lineHeight: 21
     });
+    // What it feels like sits above; what it does sits under it, plainly.
+    if (effect) {
+      D.text(ctx, effect, x + 22, y + h - 24, {
+        size: 14, color: '#8a6a2f', shadow: false
+      });
+    }
   },
 
   drawTargetCursor: function (ctx, mem, m) {
@@ -1372,9 +1426,24 @@ PW.BattleScene.prototype = {
       D.textBlock(ctx, lines, x + 16, 128, w - 32, {
         size: 15, color: '#d8cdbb', shadow: false, lineHeight: 19
       });
-      if (m.act && m.act.type === 'hold' && tg.who.soothe) {
-        D.text(ctx, 'this one might settle', x + w - 16, 104, {
-          size: 14, align: 'right', color: '#e79ab0', shadow: false
+      if (m.act && m.act.type === 'hold') {
+        var s = tg.who.soothe;
+        var note, tint;
+        if (!s) {
+          note = 'this one will not be held';
+          tint = '#9c93ad';
+        } else if (tg.mood.id === 'tender' && tg.mood.lvl > 0) {
+          note = 'it is listening — ' + (s.turns - tg.soothed) + ' to go, two at a time';
+          tint = '#ffd166';
+        } else if (tg.mood.id === 'frayed' && tg.mood.lvl > 0) {
+          note = 'angry — holding it now mostly takes the edge off';
+          tint = '#e07a4c';
+        } else {
+          note = 'this one might settle — ' + (s.turns - tg.soothed) + ' to go';
+          tint = '#e79ab0';
+        }
+        D.text(ctx, note, x + w - 16, 104, {
+          size: 14, align: 'right', color: tint, shadow: false
         });
       }
     }

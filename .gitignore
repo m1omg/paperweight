@@ -6,3 +6,6 @@ shots/
 # repo that GitHub Pages serves. They stay on the local disk.
 assets/_raw/
 assets/_lossless/
+
+# Python bytecode from the asset tools
+__pycache__/

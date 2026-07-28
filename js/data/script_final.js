@@ -7,7 +7,7 @@
   S.chapterFive = [
     ['wait', 0.8],
     ['sfx', 'wind'],
-    ['narrate', 'The Hall of Doors has four doors left in it.'],
+    ['narrate', 'The Hall of Doors has four enterable doors left in it.'],
     ['wait', 0.5],
     ['narrate', 'Three of them are shut and smooth and have no handles any ' +
       'more. The fourth is at the end, and it is the one Wick told you not to ' +

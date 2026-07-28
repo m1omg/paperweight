@@ -42,6 +42,12 @@ PW.save = (function () {
       flags: {},
       party: ['june'],
       actors: {},
+      // `pocket` is {itemId: count}. It used to be conjured on first use by
+      // PW.items.pocket() and never appeared here, which worked only because
+      // that lazy creation quietly covered for it — but it meant a save could
+      // carry a field the template did not admit to. Everything saved belongs
+      // in here, so that load()'s back-fill has the whole shape to work from.
+      pocket: {},
       kept: [],
       keptMax: 4,
       room: 'bedroom',

@@ -20,6 +20,9 @@ PW.assets = (function () {
     ['bg_landing', 'assets/bg/bg_landing.jpg'],
     ['bg_street', 'assets/bg/bg_street.jpg'],
     ['bg_hub', 'assets/bg/bg_hub.jpg'],
+    // ...and the same hall with doors taken out of it. See tools/hall.py.
+    ['bg_hub_worn', 'assets/bg/bg_hub_worn.jpg'],
+    ['bg_hub_bare', 'assets/bg/bg_hub_bare.jpg'],
     ['bg_kitchen', 'assets/bg/bg_kitchen.jpg'],
     ['bg_garden', 'assets/bg/bg_garden.jpg'],
     ['bg_attic', 'assets/bg/bg_attic.jpg'],

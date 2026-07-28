@@ -307,11 +307,18 @@ ASSETS = [
         "stubby clawed legs, a hot kettle balanced on top like a hat, smoke snorting from its flue. "
         f"Big, grumpy, warm-hearted. {MAGENTA} {STYLE}")),
 
+    # The whole scene this thing appears in turns on Dell saying "June, that's
+    # your gran's face" — so it has to be recognisably Nel's face, old, and not
+    # a generic sleeping woman. Asking for "a girl's face" is what produced a
+    # young one.
     dict(name="en_drownedlily", kind="cutout", size="1024x1024", prompt=(
         "THE DROWNED LILY, a boss creature: an enormous pale water-lily blossom the size of a bed, "
-        "petals opening around a calm sleeping girl's face made entirely of clear water, long "
-        "trailing roots hanging beneath it like hair, faint green glow, water running endlessly off "
-        f"the petals. Serene, sorrowful, beautiful, frightening. {MAGENTA} {STYLE}")),
+        "petals opening around the sleeping face of a very old woman, made entirely of clear water. "
+        "The face is elderly and unmistakably so: deeply lined and crinkled around the eyes and "
+        "mouth, hollow cheeks, a soft heavy jaw, the face of a kind grandmother in her eighties, "
+        "eyes closed, utterly peaceful. Loose silver-white hair floats out of the petals and runs "
+        "into the long trailing roots hanging beneath the blossom. Faint green glow, water running "
+        f"endlessly off the petals. Serene, sorrowful, beautiful, frightening. {MAGENTA} {STYLE}")),
 
     dict(name="en_nameless", kind="cutout", size="1024x1024", prompt=(
         "THE NAMELESS, a boss creature: a tall thin soft figure of a person made entirely of "

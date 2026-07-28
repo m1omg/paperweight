@@ -46,7 +46,7 @@ def rooms():
     for (var k in PW.rooms) {
       var r = PW.rooms[k];
       out[k] = {
-        name: r.name, bg: r.bg, walk: r.walk, block: r.block,
+        name: r.name, bg: PW.roomBg(r), walk: r.walk, block: r.block,
         spawns: r.spawns || {},
         entities: r.entities.map(function (e) {
           return { id: e.id, x: e.x, y: e.y, w: e.w, h: e.h,

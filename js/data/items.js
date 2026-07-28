@@ -129,10 +129,36 @@ PW.items = (function () {
 
   for (var k in I) I[k].id = k;
 
+  /* What using a thing actually does, written out of its own `use` block.
+     The descriptions are flavour and stay flavour — this is the line that
+     tells you whether the Warm Sock is any use to you right now. Deriving it
+     rather than writing it twice means it cannot quietly go out of date when
+     a number is tuned. */
+  function effectOf(item) {
+    if (!item || !item.target) return '';
+    var u = item.use || {}, out = [];
+    if (u.revive) out.push('gets someone up again');
+    if (u.hp) out.push('mends ' + u.hp);
+    if (u.dmg) out.push('does ' + u.dmg);
+    if (u.bp) out.push(u.bp + ' breath back');
+    if (u.calm) out.push('steadies');
+    if (u.bind) out.push('leaves them weaker and slower for ' + u.bind + ' turns');
+    if (u.mood) out.push('nudges them ' + u.mood);
+    if (u.buff) {
+      if (u.buff.def) out.push('harder to hurt');
+      if (u.buff.atk) out.push('hits harder');
+      if (u.buff.turns) out[out.length - 1] += ' for ' + u.buff.turns + ' turns';
+    }
+    return out.join(', ');
+  }
+
   return {
     all: I,
     get: function (id) { return I[id] || null; },
     isKept: function (id) { return I[id] && I[id].kind === 'kept'; },
+    effect: function (id) {
+      return effectOf(typeof id === 'string' ? I[id] : id);
+    },
 
     /* ------------------------------------------------ the two pouches -- */
 

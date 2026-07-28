@@ -124,7 +124,12 @@ PW.DialogueBox.prototype = {
   draw: function (ctx) {
     if (!this.active) return;
     var D = PW.draw;
-    var narrate = this.style === 'narrate';
+    // A memory is not narration and it is not somebody talking. It gets its own
+    // box — warmer, softer-edged, and labelled — because the game asks the
+    // player to treat these as things worth carrying, and a line that looks
+    // exactly like a description of the furniture does not read that way.
+    var remember = this.style === 'memory';
+    var narrate = this.style === 'narrate' || remember;
 
     var bx = 40, bh = 148, by = PW.H - bh - 26, bw = PW.W - 80;
     var hasFace = !!this.who && PW.assets.has('por_' + this.who + '_' + this.expr);
@@ -132,10 +137,22 @@ PW.DialogueBox.prototype = {
     var textW = bw - (hasFace ? 200 : 60);
 
     D.panel(ctx, bx, by, bw, bh, {
-      fill: narrate ? 'rgba(24,20,38,.90)' : 'rgba(246,237,220,.96)',
-      stroke: narrate ? 'rgba(214,200,168,.75)' : '#3a3050',
+      fill: remember ? 'rgba(58,40,34,.92)'
+                     : narrate ? 'rgba(24,20,38,.90)' : 'rgba(246,237,220,.96)',
+      stroke: remember ? 'rgba(232,200,130,.85)'
+                       : narrate ? 'rgba(214,200,168,.75)' : '#3a3050',
       radius: 16, seed: 7
     });
+
+    if (remember) {
+      var lw = D.measure(ctx, 'you remember', 16) + 28;
+      D.panel(ctx, bx + 26, by - 16, lw, 30, {
+        fill: 'rgba(232,200,130,.9)', stroke: '#3a3050', radius: 9, seed: 11, shadow: false
+      });
+      D.text(ctx, 'you remember', bx + 40, by - 10, {
+        size: 16, color: '#3a2822', shadow: false
+      });
+    }
 
     // The portrait goes on top of the panel and hangs out over its top edge,
     // like a sticker stuck to the corner of the box.
@@ -169,7 +186,7 @@ PW.DialogueBox.prototype = {
       if (take > 0) {
         D.text(ctx, line.substring(0, take), textX, ty + i * lh, {
           size: narrate ? 21 : 22,
-          color: narrate ? '#e7ddc4' : '#33294a',
+          color: remember ? '#f3dfae' : narrate ? '#e7ddc4' : '#33294a',
           shadow: narrate,
           wobble: 0.8
         });
@@ -352,6 +369,11 @@ PW.Script.prototype = {
         this.waitFn = function () { return sc.box.active; };
         break;
 
+      case 'remember':
+        sc.box.show(null, null, a, 'memory');
+        this.waitFn = function () { return sc.box.active; };
+        break;
+
       case 'choice':
         // ['choice', 'prompt or null', [[label, [cmds]], ...]]
         var prompt = a, opts = b;
@@ -437,6 +459,13 @@ PW.Script.prototype = {
           PW.audio.sfx('sparkle');
           var it = PW.items.get(a);
           PW.game.toast((it.kind === 'kept' ? 'kept: ' : 'got: ') + it.name);
+          // Picking a memory up is the moment to say what it is a memory of.
+          // A toast reading "kept: Photograph, Face Down" does not tell the
+          // player they have just taken on something with a weight to it.
+          if (it.kind === 'kept' && it.memory) {
+            sc.box.show(null, null, it.memory, 'memory');
+            this.waitFn = function () { return sc.box.active; };
+          }
         } else if (res === 'full') {
           this.enter(PW.keptFullPrompt(a));
         }

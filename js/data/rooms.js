@@ -130,7 +130,18 @@ PW.rooms = (function () {
        door here is a door somebody painted — the two big near ones on the left
        and right, the double door at the far end, and a hatch in the ceiling. */
     hub: {
-      name: 'The Hall of Doors', bg: 'bg_hub', music: 'dream',
+      name: 'The Hall of Doors',
+      // The hall is the one room that keeps losing pieces of itself, so its
+      // art is chosen at draw time rather than fixed: chapter four takes two
+      // doors off the back wall and chapter five takes three more. The
+      // narration says so out loud, so the painting has to agree with it.
+      // tools/hall.py makes the worn versions.
+      bg: function () {
+        if (PW.state.chapter >= 5) return 'bg_hub_bare';
+        if (PW.state.chapter >= 4) return 'bg_hub_worn';
+        return 'bg_hub';
+      },
+      music: 'dream',
       walk: [[285, 248, 410, 52], [230, 300, 520, 60], [155, 360, 665, 70],
              [80, 430, 800, 60], [25, 490, 905, 48]],
       depth: { y0: 250, y1: 540, s0: 0.52, s1: 1.05 },
@@ -350,3 +361,9 @@ PW.rooms = (function () {
   }
   return R;
 })();
+
+/** The art a room is wearing right now. `bg` may be a plain name or a function
+    of the story, which is how the hall loses its doors. */
+PW.roomBg = function (room) {
+  return typeof room.bg === 'function' ? room.bg() : room.bg;
+};

@@ -81,27 +81,28 @@
 
   S.table = function () {
     if (PW.flag('table_done')) {
-      return [['narrate', 'The long table, scrubbed pale. Four chairs. One of ' +
-        'them is pushed out.']];
+      return [['narrate', 'The long table, scrubbed pale. One stretch of the ' +
+        'edge is worn paler than the rest.']];
     }
     return [
       ['narrate', 'The long kitchen table, scrubbed pale by about nine thousand ' +
         'washings-up.'],
-      ['narrate', 'There are four chairs. Three are tucked in. One is pushed ' +
-        'out, at the angle of somebody who got up to check something on the ' +
-        'stove and meant to come straight back.'],
+      ['narrate', 'Nothing on it. Nothing has been put down on it for four ' +
+        'months. One stretch of the near edge is worn smoother than the rest, ' +
+        'where somebody stood and leaned every morning to watch the stove.'],
       ['wait', 0.8],
       ['choice', null, [
-        ['Push the chair in.', [
-          ['sfx', 'door'],
-          ['narrate', 'You push it in. It goes in easily, which is somehow the ' +
-            'worst part.'],
+        ['Put your hands where hers went.', [
+          ['sfx', 'cursor'],
+          ['narrate', 'The wood is warm from the stove. It fits your hands ' +
+            'badly, because you are not as tall as she was and you never will ' +
+            'be now.'],
           ['say', 'june', 'low', '...'],
-          ['flag', 'pushed_chair', true],
+          ['flag', 'leaned_on_table', true],
           ['flag', 'table_done', true]
         ]],
-        ['Leave it out.', [
-          ['narrate', 'You leave it out.'],
+        ['Leave it be.', [
+          ['narrate', 'You leave it. You do not put a hand anywhere near it.'],
           ['say', 'dell', 'calm', "Yeah. Leave it."],
           ['flag', 'table_done', true]
         ]]
