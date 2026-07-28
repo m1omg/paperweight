@@ -159,12 +159,22 @@ PW.input = (function () {
       };
     }
     // The most fingers down at any point decides what a tap means.
+    var one = g.fingers <= 1;
     g.fingers = Math.max(g.fingers, e.touches.length);
+    // A second finger turns the thumbstick into a gesture. Let go of whatever
+    // direction the first finger was holding, or she walks on through it.
+    if (g.fingers > 1 && one) steer(0, 0);
   }
 
   function onTouchMove(e) {
     if (!g || overUI(e)) return;
     e.preventDefault();
+
+    /* Only one finger steers. Two and three are gestures, and a hand makes
+       them by rolling slightly — the first finger drifts well past DEAD as the
+       second lands, which used to mark the gesture as a drag and throw the tap
+       away. A two-finger tap that travels is still a two-finger tap. */
+    if (g.fingers > 1) return;
 
     var t = findTouch(e.touches, g.id);
     if (!t) return;

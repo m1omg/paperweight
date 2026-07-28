@@ -84,12 +84,18 @@ function fakeImage() {
 }
 
 const listeners = {};
+const docListeners = {};
 const store = {};
 
 const el = () => ({
   style: {}, classList: { add() {}, remove() {} },
   addEventListener() {}, focus() {}, hidden: false, textContent: '',
-  getContext: fakeCanvasCtx, width: 960, height: 540
+  getContext: fakeCanvasCtx, width: 960, height: 540,
+  // The gesture layer asks the #screen element how big it is, to turn a touch
+  // into game coordinates, and asks a touch target whether it is the boot
+  // overlay or the fullscreen button. Answer both, or taps land nowhere.
+  getBoundingClientRect: () => ({ left: 0, top: 0, width: 960, height: 540 }),
+  closest: () => null
 });
 
 const win = {
@@ -111,7 +117,11 @@ const win = {
   document: {
     getElementById: el,
     createElement: (t) => (t === 'canvas' ? { width: 0, height: 0, getContext: fakeCanvasCtx } : el()),
-    addEventListener() {}, documentElement: { requestFullscreen() {} },
+    // Touch listeners live on the document. Record them so a test can send a
+    // real gesture through the real handlers instead of poking input state.
+    addEventListener: (k, fn) => { (docListeners[k] = docListeners[k] || []).push(fn); },
+    removeEventListener() {},
+    documentElement: { requestFullscreen() {} },
     fullscreenElement: null, exitFullscreen() {}
   }
 };
@@ -176,6 +186,16 @@ PW.DialogueBox.prototype.show = function (who, expr, text, style) {
   return origShow.call(this, who, expr, text, style);
 };
 
+/* The real input module, kept before the scripted one replaces it. Everything
+   below reads a fake `keys` object so a test can press keys without a DOM —
+   but that also means the actual gesture layer is bypassed, so a touch test
+   has to ask `rawInput` what genuinely happened. */
+const rawInput = {
+  held: PW.input.held, hit: PW.input.hit, rep: PW.input.rep, up: PW.input.up,
+  any: PW.input.any, axisX: PW.input.axisX, axisY: PW.input.axisY,
+  tap: PW.input.tap, endFrame: PW.input.endFrame, flush: PW.input.flush
+};
+
 // Scripted input: the test presses keys by setting these.
 const keys = { down: {}, pressed: {} };
 PW.input.held = (a) => !!keys.down[a];
@@ -233,7 +253,52 @@ function check(name, ok, detail) {
   console.log((ok ? '  ok   ' : '  FAIL ') + name + (detail ? '  — ' + detail : ''));
 }
 
-module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top };
+/* --------------------------------------------------------------- touch ---- */
+
+/** Fire a real event at whatever the gesture layer registered on `document`. */
+function fire(type, ev) {
+  (docListeners[type] || []).forEach((fn) => fn(ev));
+}
+
+function touchList(points) {
+  const list = points.map((p, i) => ({
+    identifier: i, clientX: p[0], clientY: p[1], target: null
+  }));
+  list.item = (i) => list[i];
+  return list;
+}
+
+function ev(points) {
+  return {
+    touches: touchList(points),
+    changedTouches: touchList(points),
+    target: { closest: () => null },
+    preventDefault() {}, stopPropagation() {}
+  };
+}
+
+/**
+ * Tap with `n` fingers, the way a hand does it: every finger down, then every
+ * finger up. One finger aims at (x, y); two and three are gestures and the
+ * position is ignored, exactly as the gesture layer treats them.
+ */
+function tapFingers(n, x, y) {
+  const pts = [];
+  for (let i = 0; i < n; i++) pts.push([(x || 480) + i * 40, (y || 270)]);
+  for (let i = 1; i <= n; i++) fire('touchstart', ev(pts.slice(0, i)));
+  for (let i = n - 1; i >= 0; i--) fire('touchend', ev(pts.slice(0, i)));
+}
+
+/** Press and hold a drag from (x,y) to (x+dx, y+dy) without lifting. */
+function dragTo(x, y, dx, dy) {
+  fire('touchstart', ev([[x, y]]));
+  fire('touchmove', ev([[x + dx, y + dy]]));
+}
+
+function dragEnd(x, y) { fire('touchend', ev([])); }
+
+module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top,
+                   fire, tapFingers, dragTo, dragEnd, rawInput };
 
 if (require.main === module) {
   require('./smoke_run.js').main(module.exports);

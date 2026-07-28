@@ -33,6 +33,7 @@ Hard constraints to preserve:
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
 node tools/paths.js            # 47 checks: endings, every skill, every item, party wipe, saves
+node tools/gestures.js         # 13 checks: the gesture layer, real touch events, no Chrome
 node tools/touch.js            # 33 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art
@@ -116,6 +117,16 @@ One layer. Touch gestures synthesise the same virtual actions the keyboard
 produces (`up/down/left/right/ok/back/pocket/fullscreen/mute`), so no scene knows
 which is in use. Read with `held()`, `hit()` (this frame), `rep()` (menu
 auto-repeat), `axisX/axisY()`, `tap()` (game coordinates).
+
+**One finger steers; two and three are gestures.** A drag is a thumbstick, so it
+tracks the first finger and cancels itself past `DEAD` (20px) — but a hand makes
+a multi-finger tap by *rolling*, and that drift used to mark the gesture as a
+drag and throw the tap away, which is how two-finger back silently died on real
+hardware. Once `g.fingers > 1`, `onTouchMove` returns without steering or
+setting `moved`, and the second finger releases whatever direction the first was
+holding. Nothing here can be tested with still fingers: `tools/gestures.js`
+fires real events with a roll in them, and reads `rawInput` because `smoke.js`
+replaces `PW.input`'s readers with a scripted `keys` object for every other test.
 
 ### State and saving — `js/engine/save.js`
 
