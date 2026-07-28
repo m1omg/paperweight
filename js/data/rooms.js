@@ -30,7 +30,7 @@ PW.rooms = (function () {
     /* The bed fills the left of the picture and the door is at the right-hand
        edge, half out of frame. The floor starts just under the wainscot. */
     bedroom: {
-      name: 'Your Room', bg: 'bg_bedroom', music: 'real',
+      name: 'Your Room', bg: 'bg_bedroom', music: 'real', waking: true,
       walk: [[295, 250, 595, 285], [180, 480, 710, 55]],
       block: [[793, 335, 80, 90], [880, 465, 30, 70]],
       depth: DEPTH,
@@ -68,7 +68,7 @@ PW.rooms = (function () {
        open and spilling light in the middle — and the stairs going down at the
        right, past the balustrade. */
     landing: {
-      name: 'The Landing', bg: 'bg_landing', music: 'real',
+      name: 'The Landing', bg: 'bg_landing', music: 'real', waking: true,
       walk: [[105, 240, 775, 55], [105, 295, 545, 245]],
       block: [[532, 238, 110, 20]],
       depth: DEPTH,
@@ -99,7 +99,7 @@ PW.rooms = (function () {
     /* Wet road in the middle, the lit shop up on the left pavement, and the
        path home curling away off the bottom-right corner. */
     street: {
-      name: 'Wren Street', bg: 'bg_street', music: 'real',
+      name: 'Wren Street', bg: 'bg_street', music: 'real', waking: true,
       walk: [[150, 270, 245, 45], [115, 315, 640, 100], [85, 415, 700, 120]],
       depth: { y0: 320, y1: 540, s0: 0.66, s1: 1.02 },
       spawns: { fromhouse: { x: 740, y: 470, dir: 'left' } },

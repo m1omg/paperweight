@@ -160,6 +160,118 @@ ck('an old actor picks up skills added since',
    PW.party.skillsOf('wick').indexOf('say_their_name')>=0,
    PW.party.skillsOf('wick').join(', '));
 
+/* --- reaching into a pocket with nothing in front of you ------------------
+ *
+ * Moods, buffs and binding only mean anything in a fight, so out here an item
+ * counts only if it mends, gives breath back, or gets somebody up. The menu
+ * must also refuse to spend one on a party that does not need it, and must
+ * never quietly eat a memory — a kept thing leaves the pouch only by being put
+ * down on purpose, which is what the ending counts.
+ */
+function withParty(){
+  PW.save.reset();
+  ['wick','dell'].forEach(x=>PW.party.add(x));
+  PW.game.start(new PW.FieldScene('hub','start'));
+  until(()=>top().name==='field'&&!top().script.running,'ok',600);
+}
+const rec = id => PW.party.rec(id), maxOf = id => PW.party.stats(id);
+
+withParty();
+ck('supplies that mend can be used outside a fight',
+   ['jam','sweet','plaster','sock','crane','pencil'].every(i=>PW.items.usableOutside(i)));
+ck('things that only matter in a fight cannot',
+   ['thimble','marble','thread','musicbox','key','paperweight']
+     .every(i=>!PW.items.usableOutside(i)));
+
+PW.items.give('jam',2);
+rec('june').hp = 5;
+let pk = new PW.PocketScene(); PW.game.push(pk); run(4);
+pk.tab = 1; pk.idx = 0; pk.activate();
+ck('a jar of jam mends someone out in the world',
+   rec('june').hp === Math.min(maxOf('june').maxhp, 65) && PW.items.count('jam') === 1,
+   'hp='+rec('june').hp+' x'+PW.items.count('jam'));
+pk.activate();
+ck('and will not be spent on nobody', PW.items.count('jam') === 1, pk.note);
+PW.game.pop();
+
+withParty();
+PW.items.give('jam');
+rec('june').hp = 10; rec('wick').hp = 10;
+pk = new PW.PocketScene(); PW.game.push(pk); run(4);
+pk.tab = 1; pk.idx = 0; pk.activate();
+ck('two hurt friends means it asks who', !!pk.pick && pk.pick.who.length === 2,
+   pk.pick ? pk.pick.who.join(',') : 'no picker');
+run(3);                              // the picker draws without throwing
+pk.apply(pk.pick.id, [pk.pick.who[1]]); pk.pick = null;
+ck('and it goes to the one chosen',
+   rec('wick').hp === Math.min(maxOf('wick').maxhp, 70) && rec('june').hp === 10,
+   'june='+rec('june').hp+' wick='+rec('wick').hp);
+PW.game.pop();
+
+withParty();
+PW.items.give('pencil');
+rec('dell').hp = 0;
+pk = new PW.PocketScene(); PW.game.push(pk); run(4);
+pk.tab = 1; pk.idx = Object.keys(PW.items.pocket()).indexOf('pencil'); pk.activate();
+ck('a pencil stub gets the fallen up without a fight',
+   rec('dell').hp === Math.round(maxOf('dell').maxhp * 0.5), 'hp='+rec('dell').hp);
+PW.game.pop();
+
+withParty();
+PW.items.give('violet');
+PW.state.party.forEach(id => { rec(id).hp = 20; });
+ck('a memory that mends the party mends all of it',
+   (PW.items.useOutside('violet', PW.items.wouldHelp('violet')) || []).length === 3 &&
+   PW.state.party.every(id => rec(id).hp === Math.min(maxOf(id).maxhp, 55)),
+   PW.state.party.map(id=>rec(id).hp).join(','));
+ck('using a memory does not destroy it', PW.items.has('violet'), JSON.stringify(PW.state.kept));
+PW.game.push(new PW.BattleScene('hub_a',{}));
+{ const bt = top(); bt.doItem(bt.party[0], PW.items.get('violet'), 'violet', bt.party[0]); }
+ck('nor does using one in a fight', PW.items.has('violet'), JSON.stringify(PW.state.kept));
+PW.game.pop();
+
+pk = new PW.PocketScene(); PW.game.push(pk); run(4);
+PW.state.party.forEach(id => { rec(id).hp = 20; });
+pk.tab = 2; pk.idx = PW.state.kept.indexOf('violet'); pk.activate();
+ck('a usable memory offers both decisions', !!pk.confirm && pk.confirm.labels[0] === 'use it',
+   pk.confirm ? pk.confirm.labels.join('/') : 'none');
+pk.confirm.alt();
+ck('putting one down still warns it is permanent',
+   /You will not get it back/.test(pk.confirm.text), pk.confirm.text);
+pk.confirm.action();
+ck('and putting it down is what the ending counts',
+   !PW.items.has('violet') && PW.counter('put_down') === 1);
+PW.game.pop();
+
+/* --- awake, she walks alone ----------------------------------------------
+ *
+ * Wick is a lamp with moth wings and has no business on Wren Street. Rooms
+ * June is awake in carry `waking: true` and draw no follow-trail; a script can
+ * still stage anyone deliberately, which is the only way somebody from the
+ * dream should ever turn up in the waking world.
+ */
+function walkersIn(room, spawn){
+  PW.game.start(new PW.FieldScene(room, spawn));
+  until(()=>top().name==='field'&&!top().script.running,'ok',600);
+  const sc = top(), drawn = [], real = sc.drawWalker;
+  sc.drawWalker = function (ctx, id) { drawn.push(id); };
+  run(1);
+  sc.drawWalker = real;
+  return drawn;
+}
+PW.save.reset();
+['wick','dell','hal'].forEach(x=>PW.party.add(x));
+PW.flag('tutorial_done',true); PW.flag('ch_interlude',true); PW.flag('can_sleep',true);
+PW.state.chapter = 4;
+[['bedroom','start'],['landing','frombedroom'],['street','fromhouse']].forEach(([r,s])=>{
+  const w = walkersIn(r,s);
+  ck('nobody follows her awake in '+r, w.length===1 && w[0]==='june', w.join(', ')||'nobody');
+});
+[['hub','start'],['kitchen','start']].forEach(([r,s])=>{
+  const w = walkersIn(r,s);
+  ck('the party is still there dreaming in '+r, w.length===4, w.join(', '));
+});
+
 // the real-world interlude branch
 PW.save.reset();
 PW.flag('tutorial_done',true); PW.flag('ch_interlude',true); PW.flag('can_sleep',true);

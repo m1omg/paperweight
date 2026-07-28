@@ -498,7 +498,13 @@ PW.FieldScene.prototype = {
     var party = PW.state.party;
     drawables.push({ y: this.player.y, kind: 'party', idx: 0, x: this.player.x, dir: this.player.dir,
                      moving: this.player.moving, walkT: this.player.walkT || 0 });
-    for (var m = 1; m < party.length; m++) {
+    // Awake, June walks alone. Wick is a lamp with moth wings and cannot stand
+    // on Wren Street; Dell is real, but the way you meet Dell awake is Dell
+    // being there already, not Dell trailing you out of a dream. A script can
+    // still put anyone anywhere on purpose — this only stops the automatic
+    // conga line from walking out of the house behind her.
+    var alone = !!(r && r.waking);
+    for (var m = 1; !alone && m < party.length; m++) {
       var t = this.trailAt(m * PW.FieldScene.FOLLOW_GAP);
       drawables.push({ y: t.y, kind: 'party', idx: m, x: t.x, dir: t.dir,
                        moving: this.player.moving, walkT: (this.player.walkT || 0) + m * 0.1 });

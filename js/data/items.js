@@ -152,12 +152,30 @@ PW.items = (function () {
     return out.join(', ');
   }
 
+  /* What a thing is good for when nothing is in front of you.
+     Moods, buffs and binding only mean anything inside a fight — out here a
+     thing is worth reaching for if it mends, gives breath back, or gets
+     somebody up off the floor. */
+  function fieldUse(item) {
+    if (!item || item.target === 'enemy') return false;
+    var u = item.use || {};
+    return !!(u.hp || u.bp || u.revive);
+  }
+
   return {
     all: I,
     get: function (id) { return I[id] || null; },
     isKept: function (id) { return I[id] && I[id].kind === 'kept'; },
     effect: function (id) {
       return effectOf(typeof id === 'string' ? I[id] : id);
+    },
+
+    /** Spend one, if it is the sort of thing that gets spent. A memory is not:
+        the only way a kept thing leaves the pouch is being put down on purpose,
+        which is a decision the player makes and the ending counts. */
+    consume: function (id) {
+      if (I[id] && I[id].kind === 'kept') return;
+      this.take(id);
     },
 
     /* ------------------------------------------------ the two pouches -- */
@@ -219,6 +237,70 @@ PW.items = (function () {
         if (I[kid] && I[kid].target) out.push({ id: kid, n: 1, item: I[kid], kept: true });
       }
       return out;
+    },
+
+    /* ------------------------------------------- using one out in the world -- */
+
+    /** True if this is any use with nothing attacking you. */
+    usableOutside: function (id) {
+      return fieldUse(typeof id === 'string' ? I[id] : id);
+    },
+
+    /** Everything in either pouch worth reaching for out here. */
+    fieldUsable: function () {
+      var out = [], p = this.pocket(), id;
+      for (id in p) if (p[id] > 0 && fieldUse(I[id])) out.push(id);
+      for (var i = 0; i < PW.state.kept.length; i++) {
+        id = PW.state.kept[i];
+        if (fieldUse(I[id])) out.push(id);
+      }
+      return out;
+    },
+
+    /** Members this would actually do something for right now — so the game can
+        say "nobody needs it" instead of spending a jar of jam on nothing. */
+    wouldHelp: function (id) {
+      var it = I[id];
+      if (!fieldUse(it)) return [];
+      var u = it.use || {}, out = [];
+      PW.state.party.forEach(function (m) {
+        var r = PW.party.rec(m), s = PW.party.stats(m);
+        if (r.hp <= 0) { if (u.revive) out.push(m); return; }
+        if ((u.hp && r.hp < s.maxhp) || (u.bp && r.bp < s.maxbp)) out.push(m);
+      });
+      return out;
+    },
+
+    /** Does the whole party at once rather than asking who. */
+    hitsEveryone: function (id) {
+      var it = I[id];
+      return !!it && (it.target === 'party' || it.target === 'all');
+    },
+
+    /** Use it out in the world on `who` (member ids). Spends it and returns
+        what it did, as [{id, hp, bp, revived}], or null if it would do
+        nothing at all. */
+    useOutside: function (id, who) {
+      var it = I[id];
+      if (!fieldUse(it) || !who || !who.length) return null;
+      var u = it.use || {}, done = [];
+      who.forEach(function (m) {
+        var r = PW.party.rec(m), s = PW.party.stats(m), got = null;
+        if (r.hp <= 0) {
+          if (!u.revive) return;
+          r.hp = Math.max(1, Math.round(s.maxhp * u.revive));
+          got = { id: m, hp: r.hp, bp: 0, revived: true };
+        } else {
+          var dh = 0, db = 0;
+          if (u.hp) { dh = Math.min(s.maxhp, r.hp + u.hp) - r.hp; r.hp += dh; }
+          if (u.bp) { db = Math.min(s.maxbp, r.bp + u.bp) - r.bp; r.bp += db; }
+          if (dh || db) got = { id: m, hp: dh, bp: db, revived: false };
+        }
+        if (got) done.push(got);
+      });
+      if (!done.length) return null;
+      this.consume(id);
+      return done;
     },
 
     keptFull: function () { return PW.state.kept.length >= PW.state.keptMax; },

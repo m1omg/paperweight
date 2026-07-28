@@ -14,6 +14,7 @@ PW.PocketScene = function () {
   this.idx = 0;
   this.appear = 0;
   this.confirm = null;
+  this.pick = null;
   this.note = '';
   this.noteT = 0;
 };
@@ -30,6 +31,7 @@ PW.PocketScene.prototype = {
     if (this.noteT > 0) this.noteT -= dt;
 
     if (this.confirm) { this.updateConfirm(); return; }
+    if (this.pick) { this.updatePick(); return; }
 
     if (PW.input.hit('back') || PW.input.hit('menu')) {
       PW.audio.sfx('cancel');
@@ -74,6 +76,7 @@ PW.PocketScene.prototype = {
       var c = this.confirm;
       this.confirm = null;
       if (c.idx === 0) c.action();
+      else if (c.alt) c.alt();
     }
   },
 
@@ -99,24 +102,105 @@ PW.PocketScene.prototype = {
         this.say('That one stays.');
         return;
       }
-      this.confirm = {
-        idx: 1,
-        text: 'Put down the ' + item.name + '? You will not get it back.',
-        action: function () {
-          PW.items.take(id);
-          PW.counter('put_down', 1);
-          PW.flag('put_down_' + id, true);
-          self.idx = 0;
-          PW.audio.sfx('paper');
-          self.say('You set it down. The pouch is lighter.');
-        }
-      };
+      // A memory you can reach for is two different decisions wearing one
+      // button, so it asks which. Putting down still gets its own warning.
+      if (PW.items.usableOutside(id) && PW.items.wouldHelp(id).length) {
+        this.confirm = {
+          idx: 0,
+          labels: ['use it', 'put it down'],
+          text: 'The ' + item.name + '.',
+          action: function () { self.reachFor(id); },
+          alt: function () { self.putDown(id, item); }
+        };
+        return;
+      }
+      this.putDown(id, item);
       return;
     }
 
-    if (this.tab === 1) {
-      PW.audio.sfx('cursor');
+    if (this.tab === 1) this.reachFor(list[this.idx]);
+  },
+
+  putDown: function (id, item) {
+    var self = this;
+    this.confirm = {
+      idx: 1,
+      text: 'Put down the ' + item.name + '? You will not get it back.',
+      action: function () {
+        PW.items.take(id);
+        PW.counter('put_down', 1);
+        PW.flag('put_down_' + id, true);
+        self.idx = 0;
+        PW.audio.sfx('paper');
+        self.say('You set it down. The pouch is lighter.');
+      }
+    };
+  },
+
+  /* Using a thing with nothing in front of you. Most of what an item does —
+     moods, buffs, binding — only means anything in a fight, so out here the
+     question is only ever whether somebody is hurt, winded or on the floor. */
+  reachFor: function (id) {
+    var item = PW.items.get(id);
+    if (!PW.items.usableOutside(id)) {
+      PW.audio.sfx('error');
       this.say('You can use that when something is in front of you.');
+      return;
+    }
+    var who = PW.items.wouldHelp(id);
+    if (!who.length) {
+      PW.audio.sfx('error');
+      this.say((item.use || {}).revive
+        ? 'Everybody is on their feet.'
+        : 'Nobody needs it yet.');
+      return;
+    }
+    if (PW.items.hitsEveryone(id) || who.length === 1) {
+      this.apply(id, who);
+      return;
+    }
+    PW.audio.sfx('cursor');
+    this.pick = { id: id, item: item, who: who, idx: 0 };
+  },
+
+  apply: function (id, who) {
+    var item = PW.items.get(id);
+    var done = PW.items.useOutside(id, who);
+    if (!done) { PW.audio.sfx('error'); this.say('Nobody needs it yet.'); return; }
+    PW.audio.sfx((item.use || {}).revive ? 'levelup' : 'heal');
+    if (this.idx >= this.list().length) this.idx = Math.max(0, this.list().length - 1);
+    this.say(this.tell(item, done));
+  },
+
+  /** What just happened, in words, without reading out the numbers twice. */
+  tell: function (item, done) {
+    var names = done.map(function (d) { return PW.actors[d.id].name; });
+    var lifted = done.filter(function (d) { return d.revived; });
+    if (lifted.length) {
+      return names.join(' and ') + ' gets up. Slowly, and not all the way.';
+    }
+    var hp = 0, bp = 0;
+    done.forEach(function (d) { hp += d.hp; bp += d.bp; });
+    var what = [];
+    if (hp) what.push('mended ' + hp);
+    if (bp) what.push(bp + ' breath back');
+    return names.join(' and ') + ': ' + what.join(', ') + '.';
+  },
+
+  updatePick: function () {
+    var p = this.pick;
+    if (PW.input.rep('up')) { p.idx = (p.idx + p.who.length - 1) % p.who.length; PW.audio.sfx('cursor'); }
+    if (PW.input.rep('down')) { p.idx = (p.idx + 1) % p.who.length; PW.audio.sfx('cursor'); }
+
+    var t = PW.ui.tapped('pick');
+    if (t === 'miss') return;
+    if (t) p.idx = t.idx;
+
+    if (PW.input.hit('back')) { PW.audio.sfx('cancel'); this.pick = null; return; }
+    if (PW.input.hit('ok') || t) {
+      var id = p.id, m = p.who[p.idx];
+      this.pick = null;
+      this.apply(id, [m]);
     }
   },
 
@@ -158,6 +242,46 @@ PW.PocketScene.prototype = {
     ctx.restore();
 
     if (this.confirm) this.drawConfirm(ctx);
+    if (this.pick) this.drawPick(ctx);
+  },
+
+  drawPick: function (ctx) {
+    var D = PW.draw, p = this.pick;
+    D.fill(ctx, '#0b0a14', 0.5);
+    var w = 460, h = 96 + p.who.length * 62;
+    var x = PW.W / 2 - w / 2, y = PW.H / 2 - h / 2;
+    D.panel(ctx, x, y, w, h, {
+      fill: 'rgba(246,237,220,.98)', stroke: '#3a3050', radius: 14, seed: 41
+    });
+    D.text(ctx, 'the ' + p.item.name + ', for who?', x + 26, y + 22, {
+      size: 19, color: '#33294a', shadow: false
+    });
+
+    for (var i = 0; i < p.who.length; i++) {
+      var id = p.who[i], def = PW.actors[id];
+      var r = PW.party.rec(id), s = PW.party.stats(id);
+      var sel = i === p.idx, ry = y + 62 + i * 62;
+      PW.ui.region('pick', i, x + 18, ry, w - 36, 54);
+      if (sel) {
+        D.panel(ctx, x + 18, ry, w - 36, 54, {
+          fill: 'rgba(232,200,130,.6)', stroke: false, radius: 10, seed: 44 + i, shadow: false
+        });
+      }
+      var por = PW.assets.img('por_' + def.face + '_calm');
+      var ps = Math.min(44 / por.width, 46 / por.height);
+      D.sprite(ctx, por, x + 48, ry + 50, ps);
+      D.text(ctx, def.name, x + 82, ry + 6, { size: 19, color: '#33294a', shadow: false });
+      if (r.hp <= 0) {
+        D.text(ctx, 'down', x + 82, ry + 30, { size: 14, color: '#a5601f', shadow: false });
+      } else {
+        D.bar(ctx, x + 82, ry + 32, 150, 10, r.hp / s.maxhp, {
+          fill: r.hp / s.maxhp < 0.28 ? '#e0625f' : '#84c46a'
+        });
+        D.text(ctx, r.hp + '/' + s.maxhp + '   ' + r.bp + ' breath', x + 244, ry + 29, {
+          size: 13, color: '#6b5f86', shadow: false
+        });
+      }
+    }
   },
 
   drawTabs: function (ctx, x, y, w) {
@@ -309,7 +433,8 @@ PW.PocketScene.prototype = {
           size: 14, align: 'right', color: '#8a7fa8', shadow: false
         });
       } else if (sel) {
-        D.text(ctx, 'Z to put down', x + w - 44, ry + 8, {
+        D.text(ctx, PW.items.usableOutside(id) && PW.items.wouldHelp(id).length
+          ? 'Z to use or put down' : 'Z to put down', x + w - 44, ry + 8, {
           size: 14, align: 'right', color: '#a5601f', shadow: false
         });
       }
@@ -326,7 +451,7 @@ PW.PocketScene.prototype = {
     D.textBlock(ctx, this.confirm.text, x + 28, y + 26, w - 56, {
       size: 19, color: '#33294a', shadow: false, lineHeight: 26
     });
-    var labels = ['yes', 'no'];
+    var labels = this.confirm.labels || ['yes', 'no'];
     for (var i = 0; i < 2; i++) {
       var sel = i === this.confirm.idx;
       var bx = x + 120 + i * 160;

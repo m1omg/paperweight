@@ -32,7 +32,7 @@ Hard constraints to preserve:
 
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
-node tools/paths.js            # 29 checks: endings, every skill, every item, party wipe, saves
+node tools/paths.js            # 47 checks: endings, every skill, every item, party wipe, saves
 node tools/touch.js            # 33 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art
@@ -184,6 +184,13 @@ give chase at `CHASE`. The player is faster, so a chase is always escapable —
 being caught is the price of walking past something, not of sharing a room with
 it. The constants are at the top of `js/scenes/field.js`.
 
+`waking: true` marks the three rooms June is awake in — her bedroom, the
+landing, Wren Street. They draw no follow-trail: awake, she walks alone. Wick is
+a lamp with moth wings and cannot stand on a real street, and Dell being real is
+already said by Dell *being there*, as an NPC, rather than trailing her out of a
+dream. A script can still stage anyone deliberately with `show`/`move`; the flag
+only suppresses the automatic conga line.
+
 The room art was generated, not drawn to a plan, so every box was measured
 against its painting — **verify changes with `python3 tools/boxes.py <room>` and
 look at the image**, don't guess coordinates. `smoke.js` independently asserts
@@ -223,7 +230,19 @@ a settle silently costs the ending.
 `kind: 'pocket'` supplies are unlimited; `kind: 'kept'` memories are capped by
 `PW.state.keptMax`. `PW.items.give()` returns `true`, `'full'`, or false — the
 `'full'` path runs `PW.keptFullPrompt()`, which makes the player permanently
-choose what to set down. Don't quietly drop a kept item.
+choose what to set down. Don't quietly drop a kept item — spend one with
+`PW.items.consume()`, never `take()`, because `consume` refuses to spend a
+memory. Using a thing is not putting it down: only the deliberate put-down
+removes a kept item and increments `put_down`, which the ending reads.
+
+Items work **outside a fight** too. Moods, buffs and binding only mean anything
+in battle, so out there an item counts only if it mends, gives breath back, or
+gets somebody up — `usableOutside()` decides, `wouldHelp()` says who it would
+actually do something for (so the menu can refuse to waste one on a party at
+full health), and `useOutside()` applies it to the saved actor records. The
+pockets tab uses this; the kept tab offers *use it* / *put it down* when a
+memory could do both. All of it runs on `PW.party.rec()`/`stats()`, not on
+battle combatants, so nothing there may reach for `mood`, `buffs` or `alive`.
 
 ### Audio — `js/engine/audio.js`
 

@@ -815,7 +815,7 @@ PW.BattleScene.prototype = {
   },
 
   doItem: function (a, item, itemId, target) {
-    PW.items.take(itemId);
+    PW.items.consume(itemId);
     var self = this;
     var u = item.use || {};
     var targets;

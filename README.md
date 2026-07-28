@@ -84,6 +84,12 @@ red thread, a music box that stops one note early — are not: you can carry fou
 then five. When you find something worth keeping and your hands are full, the
 game makes you choose, and putting a thing down is permanent.
 
+You do not have to be in a fight to open it. Anything that mends, gives breath
+back or gets somebody up off the floor works from the pause menu too, so a bad
+fight is not a walk back to the last save. It will not let you spend one on
+somebody who does not need it. Using a memory never costs you the memory —
+only putting it down does that, and the game asks first.
+
 **The endings** come out of all of that, not out of a question at the end:
 
 - **HELD ON** — you fought your way through and kept everything.
@@ -200,7 +206,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 ```
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
-node tools/paths.js           # 29 checks: endings, skills, items, save compatibility
+node tools/paths.js           # 47 checks: endings, skills, items, save compatibility
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 python3 tools/boxes.py        # every room's boxes drawn over its painting
@@ -220,6 +226,10 @@ skill cast, every item used, the mood triangle in both directions, a party
 wipe, and **save compatibility** — that a save is still plain JSON, that play
 never invents a field the template does not declare, and that a save missing
 today's fields entirely still loads and picks up whatever has been added since.
+It also checks the quieter rules: that a jar of jam mends somebody out in the
+world and refuses to be spent on a party that does not need it, that using a
+memory never destroys it, and that nobody from the dream follows June when she
+is awake.
 
 `touch.js` turns on Chrome's touch emulation and sends genuine
 touchstart/move/end sequences: it taps with one, two and three fingers, flicks
