@@ -17,9 +17,10 @@ PW.PocketScene = function () {
   this.pick = null;
   this.note = '';
   this.noteT = 0;
+  this.wrote = '';
 };
 
-PW.PocketScene.TABS = ['who', 'pockets', 'kept'];
+PW.PocketScene.TABS = ['who', 'pockets', 'kept', 'save'];
 
 PW.PocketScene.prototype = {
 
@@ -39,8 +40,14 @@ PW.PocketScene.prototype = {
       return;
     }
 
-    if (PW.input.rep('left')) { this.tab = (this.tab + 2) % 3; this.idx = 0; PW.audio.sfx('cursor'); }
-    if (PW.input.rep('right')) { this.tab = (this.tab + 1) % 3; this.idx = 0; PW.audio.sfx('cursor'); }
+    var tabs = PW.PocketScene.TABS.length;
+    if (PW.input.rep('left')) { this.tab = (this.tab + tabs - 1) % tabs; this.idx = 0; PW.audio.sfx('cursor'); }
+    if (PW.input.rep('right')) { this.tab = (this.tab + 1) % tabs; this.idx = 0; PW.audio.sfx('cursor'); }
+
+    // A file dropped on the window still asks: it is somebody's afternoon
+    // being put down, and a drag lands where it lands.
+    var drop = PW.save.dropped();
+    if (drop) { this.tab = 3; this.idx = 1; this.askRead(drop); return; }
 
     // A tap on a tab switches to it outright.
     var tab = PW.ui.tapped('tab');
@@ -86,13 +93,20 @@ PW.PocketScene.prototype = {
       var p = PW.items.pocket();
       return Object.keys(p).filter(function (k) { return p[k] > 0; });
     }
-    return PW.state.kept;
+    if (this.tab === 2) return PW.state.kept;
+    return ['out', 'in'];
   },
 
   activate: function () {
     var list = this.list();
     if (!list.length) return;
     var self = this;
+
+    if (this.tab === 3) {
+      if (list[this.idx] === 'out') this.writeOut();
+      else this.askRead(null);
+      return;
+    }
 
     if (this.tab === 2) {
       var id = list[this.idx];
@@ -135,6 +149,71 @@ PW.PocketScene.prototype = {
         self.say('You set it down. The pouch is lighter.');
       }
     };
+  },
+
+  /* ------------------------------------------------- carrying it out --- */
+
+  /* The three slots write when the story says so. This writes when the player
+     says so, which is the only way to stop in the middle of the attic and go
+     to bed — and it comes out as a file they keep, rather than as something
+     the browser is allowed to forget. */
+
+  writeOut: function () {
+    var name = PW.save.toFile();
+    if (!name) {
+      PW.audio.sfx('error');
+      this.say('The browser would not hand it over. Try again in a moment.');
+      return;
+    }
+    PW.audio.sfx('paper');
+    this.wrote = name;
+    this.say('Written out as ' + name);
+  },
+
+  /** `drop` is a file already read off the window; null means go and ask. */
+  askRead: function (drop) {
+    var self = this;
+    this.confirm = {
+      idx: 1,
+      text: drop
+        ? 'Take up ' + drop.name + '? Everything since your last save stays here.'
+        : 'Read in a save file? Everything since your last save stays here.',
+      action: function () {
+        if (drop) { self.readIn(drop.text, drop.name); return; }
+        var opened = PW.save.fromFile(function (name) {
+          if (!name) {
+            PW.audio.sfx('error');
+            self.say('That was not a save.');
+            return;
+          }
+          self.resume(name);
+        });
+        if (!opened) {
+          PW.audio.sfx('error');
+          self.say('This browser will not open a file. Drop it on the window instead.');
+        }
+      }
+    };
+  },
+
+  readIn: function (text, name) {
+    if (!PW.save.adopt(text)) {
+      PW.audio.sfx('error');
+      this.say('That was not a save.');
+      return;
+    }
+    this.resume(name);
+  },
+
+  /** Put the pouch away and walk back into wherever the file left off. */
+  resume: function (name) {
+    PW.audio.sfx('chime');
+    PW.game.pop();
+    PW.game.fadeOut(0.9, '#0b0a14', function () {
+      PW.game.replace(new PW.FieldScene(PW.state.room, PW.state.spawn));
+      PW.game.toast(name + ' — chapter ' + PW.state.chapter);
+      PW.game.fadeIn(0.9);
+    });
   },
 
   /* Using a thing with nothing in front of you. Most of what an item does —
@@ -224,7 +303,8 @@ PW.PocketScene.prototype = {
 
     if (this.tab === 0) this.drawWho(ctx, x, y, w, h);
     else if (this.tab === 1) this.drawPockets(ctx, x, y, w, h);
-    else this.drawKept(ctx, x, y, w, h);
+    else if (this.tab === 2) this.drawKept(ctx, x, y, w, h);
+    else this.drawSave(ctx, x, y, w, h);
 
     var close = PW.input.touchCapable()
       ? 'two-finger tap to close   swipe for tabs'
@@ -438,6 +518,39 @@ PW.PocketScene.prototype = {
           size: 14, align: 'right', color: '#a5601f', shadow: false
         });
       }
+    }
+  },
+
+  drawSave: function (ctx, x, y, w, h) {
+    var D = PW.draw;
+    var rows = [
+      { name: 'write it out', sub: 'save here, now, to a file of your own' },
+      { name: 'read one in', sub: 'pick a file up and carry on from it' }
+    ];
+    for (var i = 0; i < rows.length; i++) {
+      var sel = i === this.idx, ry = y + 78 + i * 66;
+      PW.ui.region('prow', i, x + 22, ry, w - 44, 58);
+      D.panel(ctx, x + 22, ry, w - 44, 58, {
+        fill: sel ? 'rgba(232,200,130,.5)' : 'rgba(58,48,80,.07)',
+        stroke: 'rgba(58,48,80,.35)', radius: 12, seed: 90 + i, shadow: false, lineWidth: 2
+      });
+      D.text(ctx, rows[i].name, x + 46, ry + 8, { size: 20, color: '#33294a', shadow: false });
+      D.text(ctx, rows[i].sub, x + 46, ry + 32, { size: 14, color: '#7a6f94', shadow: false });
+    }
+
+    D.textBlock(ctx,
+      'The game writes to its three slots by itself, at each chapter and on the ' +
+      'rug in the hall. This is the other kind: the save you make, wherever you ' +
+      'happen to be standing.\n\n' +
+      'It comes out as a file. Put it somewhere you will find it — the three ' +
+      'slots live in the browser, and a browser is allowed to forget them. You ' +
+      'can also just drop a file onto the window.',
+      x + 26, y + 224, w - 52, { size: 15, color: '#6b5f86', shadow: false, lineHeight: 23 });
+
+    if (this.wrote) {
+      D.text(ctx, 'last written out: ' + this.wrote, x + 26, y + h - 58, {
+        size: 13, color: '#8a6a2f', shadow: false
+      });
     }
   },
 

@@ -87,10 +87,23 @@ const listeners = {};
 const docListeners = {};
 const store = {};
 
-const el = () => ({
+// Anything the game handed to the browser as a download, so a test can look at
+// what would have landed in the downloads folder.
+const downloads = [];
+
+const el = (tag) => ({
   style: {}, classList: { add() {}, remove() {} },
   addEventListener() {}, focus() {}, hidden: false, textContent: '',
   getContext: fakeCanvasCtx, width: 960, height: 540,
+  // Exporting a save builds an <a download> and clicks it. Give the fake one
+  // enough of an anchor to be recognised as capable, and record the click.
+  tagName: String(tag || 'div').toUpperCase(),
+  download: tag === 'a' ? '' : undefined,
+  href: '', type: '', accept: '', files: null,
+  appendChild(c) { c.parentNode = this; return c; },
+  removeChild(c) { c.parentNode = null; return c; },
+  parentNode: null,
+  click() { if (this.download !== undefined) downloads.push({ name: this.download, href: this.href }); },
   // The gesture layer asks the #screen element how big it is, to turn a touch
   // into game coordinates, and asks a touch target whether it is the boot
   // overlay or the fullscreen button. Answer both, or taps land nowhere.
@@ -116,7 +129,8 @@ const win = {
   AudioContext: undefined,          // audio disables itself cleanly
   document: {
     getElementById: el,
-    createElement: (t) => (t === 'canvas' ? { width: 0, height: 0, getContext: fakeCanvasCtx } : el()),
+    body: el('body'),
+    createElement: (t) => (t === 'canvas' ? { width: 0, height: 0, getContext: fakeCanvasCtx } : el(t)),
     // Touch listeners live on the document. Record them so a test can send a
     // real gesture through the real handlers instead of poking input state.
     addEventListener: (k, fn) => { (docListeners[k] = docListeners[k] || []).push(fn); },
@@ -298,7 +312,7 @@ function dragTo(x, y, dx, dy) {
 function dragEnd(x, y) { fire('touchend', ev([])); }
 
 module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top,
-                   fire, tapFingers, dragTo, dragEnd, rawInput };
+                   fire, tapFingers, dragTo, dragEnd, rawInput, downloads };
 
 if (require.main === module) {
   require('./smoke_run.js').main(module.exports);

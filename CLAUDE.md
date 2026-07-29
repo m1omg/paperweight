@@ -32,7 +32,7 @@ Hard constraints to preserve:
 
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
-node tools/paths.js            # 47 checks: endings, every skill, every item, party wipe, saves
+node tools/paths.js            # 64 checks: endings, every skill, every item, party wipe, saves
 node tools/gestures.js         # 15 checks: the gesture layer, real touch events, no Chrome
 node tools/touch.js            # 33 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
@@ -153,6 +153,26 @@ Keeping saves loadable in both directions comes down to four rules:
 `tools/paths.js` checks all of this: that play invents no undeclared field, that
 the blob is still plain JSON, and that a save missing today's fields loads and
 picks up what has been added since.
+
+**Writing the save out to a file is the only save-anywhere there is.** The three
+slots write when the story says so — a chapter break, the rug in the hall — and
+they live in localStorage, which a browser may drop without asking. `toFile()`
+hands the blob to the browser as a download; `adopt(text)` takes one back,
+through the same back-fill `load()` uses; `fromFile(cb)` opens a picker.
+Dropping a file on the window parks it in `pendingDrop`, and whichever screen
+notices (`PW.save.waiting()` / `dropped()`) offers to take it up — the title
+screen, the pouch, or the field, which opens the pouch to ask.
+
+What comes out **is** the slot blob: no wrapper, no envelope, no format of its
+own. That is deliberate and load-bearing — every compatibility rule above then
+holds for a file unchanged, and an older build could read one. Don't be tempted
+to version or wrap it.
+
+The picker and the download both need transient user activation, and the game
+reads input a frame later than the browser does. That is inside the window in
+practice, but `toFile()` returning `false` and `fromFile()` returning `false`
+are real cases that the UI has to say out loud rather than swallow — a player
+who thinks they have a copy and does not is the worst outcome here.
 
 ### Cutscene language — `js/scenes/scene.js`
 

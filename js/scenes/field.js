@@ -173,6 +173,14 @@ PW.FieldScene.prototype = {
       PW.audio.sfx('confirm');
       PW.game.push(new PW.PocketScene());
     }
+    // A save file dropped on the window opens the pouch at the tab that knows
+    // what to do with it, so the drop does not look ignored.
+    if (PW.save.waiting()) {
+      var pouch = new PW.PocketScene();
+      pouch.tab = 3;
+      pouch.idx = 1;
+      PW.game.push(pouch);
+    }
   },
 
   updateBelow: function (dt) {

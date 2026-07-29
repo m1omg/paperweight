@@ -19,16 +19,26 @@ PW.TitleScene.prototype = {
     PW.audio.setTension(0);
     this.slots = PW.save.list();
     this.hasAny = this.slots.some(function (s) { return !!s; });
+    // A save file is a way back in even when the browser has thrown the three
+    // slots away, so it is offered whether or not there are any.
     this.opts = this.hasAny
-      ? ['keep going', 'begin again', 'about']
-      : ['begin', 'about'];
+      ? ['keep going', 'begin again', 'from a file', 'about']
+      : ['begin', 'from a file', 'about'];
     this.idx = 0;
+    this.trouble = '';
+    this.troubleT = 0;
   },
 
   update: function (dt) {
     this.t += dt;
     this.appear = Math.min(1, this.appear + dt * 0.55);
     this.dust.update(dt);
+    if (this.troubleT > 0) this.troubleT -= dt;
+
+    // Dropping the file on the window is what most people try first, and it
+    // works from anywhere on this screen.
+    var drop = PW.save.dropped();
+    if (drop) { this.readIn(drop.text); return; }
 
     if (this.mode === 'title') this.updateTitle();
     else if (this.mode === 'slots') this.updateSlots();
@@ -48,6 +58,7 @@ PW.TitleScene.prototype = {
     PW.audio.sfx('confirm');
     var pick = this.opts[this.idx];
     if (pick === 'about') { this.mode = 'about'; return; }
+    if (pick === 'from a file') { this.fromFile(); return; }
     this.mode = 'slots';
     this.newGame = (pick !== 'keep going');
     this.idx = 0;
@@ -82,6 +93,38 @@ PW.TitleScene.prototype = {
       PW.audio.sfx('cancel');
       this.mode = 'title';
     }
+  },
+
+  /* ------------------------------------------------------ from a file -- */
+
+  fromFile: function () {
+    var self = this;
+    var opened = PW.save.fromFile(function (name) {
+      if (!name) { self.say('That file was not a save.'); return; }
+      self.resume();
+    });
+    if (!opened) self.say('This browser will not open a file. Drop one on the window instead.');
+  },
+
+  readIn: function (text) {
+    if (!PW.save.adopt(text)) { this.say('That file was not a save.'); return; }
+    PW.audio.sfx('confirm');
+    this.resume();
+  },
+
+  /** Walk back into whatever room the file was written in. */
+  resume: function () {
+    PW.audio.stopMusic(1.1);
+    PW.game.fadeOut(1.2, '#0b0a14', function () {
+      PW.game.replace(new PW.FieldScene(PW.state.room, PW.state.spawn));
+      PW.game.fadeIn(1.0);
+    });
+  },
+
+  say: function (msg) {
+    PW.audio.sfx('error');
+    this.trouble = msg;
+    this.troubleT = 4;
   },
 
   begin: function (slot, fresh) {
@@ -131,6 +174,13 @@ PW.TitleScene.prototype = {
     if (this.mode === 'title') this.drawMenu(ctx, a);
     else if (this.mode === 'slots') this.drawSlots(ctx);
     else this.drawAbout(ctx);
+
+    if (this.troubleT > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.troubleT);
+      D.text(ctx, this.trouble, 132, PW.H - 74, { size: 16, color: '#e0a06a', shadowOff: 2 });
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.globalAlpha = 0.45 * a;

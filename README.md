@@ -39,6 +39,16 @@ to be highlighted. The on-screen help changes to match whichever you are using.
 The game saves to three slots in `localStorage`, and writes automatically at
 each chapter break and whenever you sit down on the rug in the Hall of Doors.
 
+**To save anywhere else, write it out to a file.** The *save* tab in your pocket
+does it wherever you happen to be standing — mid-attic, mid-hall, one room from
+somewhere you would rather not be — and hands you a file to keep. It is the only
+save you make yourself, and the only one that survives a browser deciding to
+clear its storage. Read one back in from the title screen, from the same tab, or
+by dropping the file anywhere on the window.
+
+The file is the save, exactly as a slot holds it, so all of the above applies to
+it too: it will still load in a build that has not been written yet.
+
 **A save is meant to keep working.** Somebody is always mid-playthrough, so a
 save written by any version loads in any other, in both directions — a newer
 build fills in whatever an older save has not heard of, and never writes
@@ -206,7 +216,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 ```
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
-node tools/paths.js           # 47 checks: endings, skills, items, save compatibility
+node tools/paths.js           # 64 checks: endings, skills, items, save compatibility
 node tools/gestures.js        # 15 checks: the gesture layer, real touch events, no browser
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
@@ -227,6 +237,10 @@ skill cast, every item used, the mood triangle in both directions, a party
 wipe, and **save compatibility** — that a save is still plain JSON, that play
 never invents a field the template does not declare, and that a save missing
 today's fields entirely still loads and picks up whatever has been added since.
+It does the same for a save written out to a file: that what comes out is the
+slot blob and nothing else, that it reaches the browser as a download carrying
+the run it came from, that reading one back in lands her in the right room, and
+that anything which is not a save is refused rather than half-loaded.
 It also checks the quieter rules: that a jar of jam mends somebody out in the
 world and refuses to be spent on a party that does not need it, that using a
 memory never destroys it, and that nobody from the dream follows June when she

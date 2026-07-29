@@ -10,6 +10,7 @@
 PW.save = (function () {
   var KEY = 'paperweight.save.';
   var SLOTS = 3;
+  var pendingDrop = null;   // a file dropped on the window, waiting to be read
 
   function storage() {
     try {
@@ -81,6 +82,13 @@ PW.save = (function () {
       } catch (e) { return false; }
     },
 
+    /** Anything a newer build expects but this save has never heard of. */
+    backfill: function (d) {
+      var blank = newState();
+      for (var k in blank) if (d[k] === undefined) d[k] = blank[k];
+      return d;
+    },
+
     read: function (slot) {
       var s = storage();
       if (!s) return null;
@@ -95,10 +103,7 @@ PW.save = (function () {
     load: function (slot) {
       var d = this.read(slot);
       if (!d) return false;
-      PW.state = d;
-      // Fill in anything a newer build expects but an older save lacks.
-      var blank = newState();
-      for (var k in blank) if (PW.state[k] === undefined) PW.state[k] = blank[k];
+      PW.state = this.backfill(d);
       return true;
     },
 
@@ -124,8 +129,148 @@ PW.save = (function () {
       return out;
     },
 
-    available: function () { return !!storage(); }
+    available: function () { return !!storage(); },
+
+    /* ------------------------------------------------------ carrying it -- */
+
+    /* The three slots write at fixed points — a chapter break, the rug in the
+       hall — and they live in localStorage, which a browser is entitled to
+       throw away without asking, and often does on file://. Writing the save
+       out to a file is the one save the player makes themselves, at a moment
+       of their own choosing, and keeps afterwards.
+
+       What comes out is exactly what goes into a slot: the state blob, plain,
+       with no wrapper and no format of its own. Every rule about slots holds
+       for it unchanged — an old file loads in a new build because load()
+       back-fills, and a new file loads in an old build because nothing here
+       adds a field an old build would trip over. */
+
+    /** The blob, stamped with the moment it left. */
+    text: function () {
+      PW.state.savedAt = Date.now();
+      return JSON.stringify(PW.state);
+    },
+
+    /** Something a person can find again in a downloads folder six weeks on. */
+    filename: function () {
+      var d = new Date();
+      var p = function (n) { return (n < 10 ? '0' : '') + n; };
+      return 'paperweight-ch' + PW.state.chapter +
+        '-' + Math.floor((PW.state.playtime || 0) / 60) + 'min' +
+        '-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
+        '-' + p(d.getHours()) + p(d.getMinutes()) + '.json';
+    },
+
+    /**
+     * Hand the save to the browser as a download. Returns the filename, or
+     * false if the browser would not have it — which is worth saying out loud
+     * rather than leaving the player believing they have a copy.
+     */
+    toFile: function () {
+      if (typeof document === 'undefined' || !document.createElement) return false;
+      var body = this.text();
+      var name = this.filename();
+      var url = null, blob = false;
+      try {
+        var a = document.createElement('a');
+        if (a.download === undefined) return false;
+        if (typeof Blob !== 'undefined' && window.URL && window.URL.createObjectURL) {
+          url = window.URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+          blob = true;
+        } else {
+          // No Blob: a data URI still saves, it just cannot be very large.
+          url = 'data:application/json;charset=utf-8,' + encodeURIComponent(body);
+        }
+        a.href = url;
+        a.download = name;
+        a.style.display = 'none';
+        if (document.body && document.body.appendChild) document.body.appendChild(a);
+        a.click();
+        if (a.parentNode) a.parentNode.removeChild(a);
+        if (blob && window.setTimeout) {
+          window.setTimeout(function () { window.URL.revokeObjectURL(url); }, 8000);
+        }
+        return name;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    /**
+     * Take a file's text as the game state. Refuses anything that is not a
+     * save rather than starting a run inside a room that does not exist.
+     */
+    adopt: function (text) {
+      var d;
+      try { d = JSON.parse(String(text)); } catch (e) { return false; }
+      if (!d || typeof d !== 'object' || !d.version) return false;
+      if (!d.actors || !d.party || !d.party.length) return false;
+      if (PW.rooms && !PW.rooms[d.room]) return false;
+      PW.state = this.backfill(d);
+      return true;
+    },
+
+    /**
+     * Ask for a file and adopt it. `cb(name)` on success, `cb(false)` if the
+     * player cancelled or the file was not a save. Returns false if the
+     * browser would not open a picker at all.
+     */
+    fromFile: function (cb) {
+      if (typeof document === 'undefined' || !document.createElement) return false;
+      if (typeof FileReader === 'undefined') return false;
+      var self = this;
+      try {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.style.position = 'fixed';
+        input.style.left = '-2000px';
+        input.addEventListener('change', function () {
+          if (input.parentNode) input.parentNode.removeChild(input);
+          var f = input.files && input.files[0];
+          if (!f) { cb(false); return; }
+          var r = new FileReader();
+          r.onload = function () { cb(self.adopt(r.result) ? f.name : false); };
+          r.onerror = function () { cb(false); };
+          r.readAsText(f);
+        });
+        if (document.body && document.body.appendChild) document.body.appendChild(input);
+        input.click();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    /* Dropping the file on the window works when the picker will not — it is
+       already a user gesture by the time the browser hands it over, and it is
+       what a person tries first anyway. The file waits here until a screen
+       that knows what to do with it asks. */
+    dropped: function () { var d = pendingDrop; pendingDrop = null; return d; },
+
+    /** Is one waiting? For a screen that has to open the pouch to deal with it. */
+    waiting: function () { return !!pendingDrop; },
+
+    /** For the tests, and for anything that wants to fake a drop. */
+    drop: function (name, text) { pendingDrop = { name: name, text: text }; }
   };
+})();
+
+/* -------------------------------------------------------------- dropping -- */
+
+(function () {
+  if (typeof window === 'undefined' || !window.addEventListener) return;
+  window.addEventListener('dragover', function (e) {
+    if (e.preventDefault) e.preventDefault();
+  });
+  window.addEventListener('drop', function (e) {
+    if (e.preventDefault) e.preventDefault();
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f || typeof FileReader === 'undefined') return;
+    var r = new FileReader();
+    r.onload = function () { PW.save.drop(f.name, r.result); };
+    r.readAsText(f);
+  });
 })();
 
 /* ---------------------------------------------------------------- flags -- */

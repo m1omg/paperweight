@@ -160,6 +160,104 @@ ck('an old actor picks up skills added since',
    PW.party.skillsOf('wick').indexOf('say_their_name')>=0,
    PW.party.skillsOf('wick').join(', '));
 
+/* --- writing the save out to a file ---------------------------------------
+ *
+ * The slots write when the story says so. A file writes when the player says
+ * so, which is the only save that happens anywhere. What comes out has to be
+ * the slot blob and nothing else: no wrapper, no format of its own, so every
+ * rule above holds for it unchanged and an old build could read it.
+ */
+PW.save.reset();
+PW.state.chapter=4; PW.state.room='attic'; PW.party.add('hal'); PW.items.give('crane');
+PW.flag('carried_out', true);
+const exported = PW.save.text();
+ck('what is written out is the save blob itself',
+   JSON.stringify(JSON.parse(exported).flags)===JSON.stringify(PW.state.flags) &&
+   JSON.parse(exported).room==='attic');
+ck('and nothing in it that a template does not declare',
+   Object.keys(JSON.parse(exported)).every(k=>TEMPLATE.indexOf(k)>=0||k==='savedAt'),
+   Object.keys(JSON.parse(exported)).filter(k=>TEMPLATE.indexOf(k)<0&&k!=='savedAt').join(', '));
+ck('the filename says which run it is', /^paperweight-ch4-\d+min-\d{8}-\d{4}\.json$/
+   .test(PW.save.filename()), PW.save.filename());
+
+const before = H.downloads.length;
+const name = PW.save.toFile();
+const dl = H.downloads[H.downloads.length-1];
+ck('it reaches the browser as a download', !!name && H.downloads.length===before+1 &&
+   dl.name===name, name+' / '+(dl&&dl.name));
+ck('and the download carries the save', !!dl &&
+   decodeURIComponent(dl.href.replace(/^data:[^,]*,/,'')).indexOf('"room":"attic"')>0);
+
+// Reading one back in, from a fresh start, is the whole point.
+PW.save.reset();
+ck('a file read back in is the run it came from', PW.save.adopt(exported) &&
+   PW.state.chapter===4 && PW.state.room==='attic' &&
+   PW.party.has('hal') && PW.items.has('crane') && PW.flag('carried_out'));
+
+// It back-fills exactly like a slot does, so an old file is not a dead end.
+PW.save.reset();
+ck('an old file back-fills like a slot', PW.save.adopt(JSON.stringify(older)) &&
+   PW.state.chapter===5 && PW.state.pocket && PW.state.keptMax===5,
+   JSON.stringify(PW.state.pocket));
+
+// ...and anything that is not a save is refused rather than half-loaded.
+PW.save.reset();
+const kept = PW.state.chapter;
+ck('nonsense is refused', !PW.save.adopt('this is not a save') &&
+   !PW.save.adopt('{"version":1}') &&
+   !PW.save.adopt(JSON.stringify({version:1, party:['june'], actors:{}, room:'nowhere'})) &&
+   PW.state.chapter===kept);
+
+// A file dropped on the window waits until a screen asks for it, and is only
+// handed over once.
+PW.save.drop('x.json', exported);
+const got = PW.save.waiting() && PW.save.dropped();
+ck('a dropped file waits to be picked up', got && got.name==='x.json' &&
+   PW.save.dropped()===null && !PW.save.waiting());
+
+/* ...and dropping one while walking about opens the pouch to ask, rather than
+   swallowing the file and looking broken. */
+PW.save.reset();
+PW.game.start(new PW.FieldScene('hub','start'));
+until(()=>top().name==='field'&&!top().script.running,'ok',600);
+PW.save.drop('walked.json', exported);
+run(3);
+ck('a file dropped mid-game opens the pouch and asks', top().name==='pocket' &&
+   !!top().confirm && /walked\.json/.test(top().confirm.text),
+   top().name+': '+(top().confirm&&top().confirm.text));
+top().confirm.action(); run(4);
+until(()=>top().name==='field'&&!PW.game.busy(),null,400);
+ck('and saying yes puts her where the file left off',
+   PW.state.room==='attic' && PW.state.chapter===4, PW.state.room+' ch'+PW.state.chapter);
+
+/* The title screen offers it whether or not there is a slot to load — a file
+   is the way back in precisely when the browser has thrown the slots away. */
+PW.save.reset();
+PW.game.start(new PW.TitleScene());
+run(2);
+ck('the title screen offers a file with no saves at all',
+   top().opts.indexOf('from a file')>=0, top().opts.join(', '));
+
+/* The pouch's fourth tab is the save you make yourself. Walk to it, write one
+   out, and check the room came from a real run rather than a fresh state. */
+PW.save.reset();
+PW.state.chapter=2; PW.items.give('jam');
+PW.game.start(new PW.FieldScene('kitchen','start'));
+until(()=>top().name==='field'&&!top().script.running,'ok',600);
+tick('menu'); run(2);
+ck('the pouch has a save tab', top().name==='pocket' &&
+   PW.PocketScene.TABS[3]==='save', PW.PocketScene.TABS.join(', '));
+const saveTab = top();
+saveTab.tab=3; saveTab.idx=0; run(2); tick('ok'); run(2);
+ck('writing out from the pouch says what it wrote',
+   /^Written out as paperweight-ch2-/.test(saveTab.note), saveTab.note);
+ck('and it remembers the last one for the panel', !!saveTab.wrote, saveTab.wrote);
+saveTab.idx=1; run(2); tick('ok'); run(2);
+ck('reading one in asks first, and defaults to no',
+   !!saveTab.confirm && saveTab.confirm.idx===1, saveTab.confirm && saveTab.confirm.text);
+tick('back'); run(2);
+ck('and backing out of that changes nothing', !saveTab.confirm && PW.state.chapter===2);
+
 /* --- reaching into a pocket with nothing in front of you ------------------
  *
  * Moods, buffs and binding only mean anything in a fight, so out here an item
