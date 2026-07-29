@@ -3,12 +3,11 @@
  * Keyboard and touch both feed the same small set of virtual keys, so no scene
  * ever has to know which one is being used:
  *
- *   keyboard          touch
- *   ---------------   ---------------------------------------------
- *   arrows / WASD     drag anywhere — a thumbstick that follows your finger
- *   Z / Enter         tap with one finger
- *   X / Esc           tap with two fingers
- *   C / Shift         tap with three fingers
+ *   keyboard             touch
+ *   ------------------   ------------------------------------------
+ *   arrows / WASD        drag anywhere — a thumbstick that follows your finger
+ *   Z / Enter            tap with one finger
+ *   X / Esc / C / Shift  tap with two fingers (or three)
  *
  * A drag steers continuously while you hold it, and a quick flick moves a menu
  * cursor exactly one step, because crossing the dead zone produces a single key
@@ -23,8 +22,12 @@ PW.input = (function () {
     ArrowLeft: 'left', KeyA: 'left',
     ArrowRight: 'right', KeyD: 'right',
     KeyZ: 'ok', Enter: 'ok', Space: 'ok',
+    // X and C are one key. Out in a room, "back" has nothing to go back to, so
+    // it opens the pouch; in a menu, "pocket" has nowhere further to go, so it
+    // closes it. Two ways to say the same thing was only ever a way to press
+    // the wrong one.
     KeyX: 'back', Escape: 'back', Backspace: 'back',
-    KeyC: 'menu', ShiftLeft: 'menu', ShiftRight: 'menu',
+    KeyC: 'back', ShiftLeft: 'back', ShiftRight: 'back',
     KeyF: 'fullscreen',
     KeyM: 'mute'
   };
@@ -90,7 +93,9 @@ PW.input = (function () {
   var tapAt = null;    // where a tap landed this frame, in game coordinates
   var screen = null;
 
-  var TAP_KEY = { 1: 'ok', 2: 'back', 3: 'menu' };
+  // Three fingers still work, because hands remember; they say the same thing
+  // two fingers do.
+  var TAP_KEY = { 1: 'ok', 2: 'back', 3: 'back' };
 
   function now() {
     return (typeof performance !== 'undefined' && performance.now)

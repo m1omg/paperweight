@@ -14,7 +14,7 @@
  *   node tools/gestures.js
  */
 const H = require('./smoke.js');
-const {PW, fire, rawInput, tapFingers, settle} = H;
+const {PW, fire, key, rawInput, tapFingers, settle} = H;
 const R = rawInput;
 let pass=0, fail=0;
 const ck=(n,ok,d)=>{ ok?pass++:fail++; console.log((ok?'  ok   ':'  FAIL ')+n+(d?'  — '+d:'')); };
@@ -46,9 +46,12 @@ ck('a diagonal holds both axes', R.held('up') && R.held('right'));
 fire('touchend', T([]));
 
 // taps of each arity, held perfectly still and with a roll
-[[1,'ok'],[2,'back'],[3,'menu']].forEach(([n,want])=>{
+/* Two fingers and three say the same thing now: X and C were merged, because
+   out in a room "back" has nothing to go back to and C was the only way to
+   reach the pouch — so a two-finger tap did nothing where it mattered most. */
+[[1,'ok'],[2,'back'],[3,'back']].forEach(([n,want])=>{
   reset(); tapFingers(n, 300, 200);
-  ck(n+'-finger tap still means '+want, R.hit(want), 'ok='+R.hit('ok')+' back='+R.hit('back')+' menu='+R.hit('menu'));
+  ck(n+'-finger tap means '+want, R.hit(want), 'ok='+R.hit('ok')+' back='+R.hit('back'));
 });
 reset();
 fire('touchstart', T([[400,300]]));
@@ -56,7 +59,7 @@ fire('touchstart', T([[400,300],[460,300],[520,300]]));
 fire('touchmove',  T([[430,340],[460,300],[520,300]]));
 fire('touchend',   T([]));
 settle();
-ck('a three-finger tap survives a roll too', R.hit('menu'));
+ck('a three-finger tap survives a roll too', R.hit('back'));
 
 /* Everything below is a two-finger tap that the old release-time rules threw
    away. A gesture is decided when the fingers land, so none of it can. */
@@ -118,8 +121,8 @@ fire('touchstart', T([[400,300],[460,300]]));
 fire('touchstart', T([[400,300],[460,300],[520,300]]));
 fire('touchend',   T([]));
 settle();
-ck('a hand that lands raggedly is still three fingers',
-   R.hit('menu') && !R.hit('back'), 'menu='+R.hit('menu')+' back='+R.hit('back'));
+ck('a hand that lands raggedly still says back once',
+   R.hit('back'), 'back='+R.hit('back'));
 
 // a one-finger tap still reports where it landed
 reset(); tapFingers(1, 312, 244);
@@ -158,6 +161,16 @@ fire('touchstart', onUI([[900,500]]));
 fire('touchend',   T([]));
 ck('a tap that starts on the button is left alone',
    !R.hit('ok') && !R.hit('back'), 'ok='+R.hit('ok')+' back='+R.hit('back'));
+
+/* X and C are one key on the keyboard too, which is the whole reason two
+   fingers were useless: out in a room only C did anything, and two fingers
+   said X. */
+[['KeyX','X'],['Escape','Esc'],['KeyC','C'],['ShiftLeft','Shift']].forEach(([code,label])=>{
+  reset(); key(code);
+  ck(label+' means back', R.hit('back') && !R.hit('ok'), 'back='+R.hit('back'));
+});
+reset(); key('KeyZ');
+ck('and Z is still its own key', R.hit('ok') && !R.hit('back'));
 
 console.log('\n'+pass+'/'+(pass+fail)+' gesture checks passed');
 process.exit(fail?1:0);

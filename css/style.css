@@ -95,7 +95,7 @@ html, body {
 
 #boot-touch { display: none; }
 
-#fs, #rotate { display: none; }
+#fs { display: none; }
 
 /* `pointer: coarse` is the honest test for "a finger is the pointing device",
    and it is what decides whether the touch help and the fullscreen button
@@ -121,16 +121,4 @@ html, body {
   #fs:active { background: rgba(246, 231, 196, .25); }
   /* Once we are fullscreen the button has done its job and gets out of the way. */
   body.is-fullscreen #fs { opacity: .25; }
-}
-
-@media (pointer: coarse) and (orientation: portrait) {
-  #rotate {
-    display: block;
-    position: absolute; left: 0; right: 0; top: 14px;
-    text-align: center;
-    font-size: 13px; letter-spacing: .08em;
-    color: #6d6786;
-    z-index: 19;
-    pointer-events: none;
-  }
 }

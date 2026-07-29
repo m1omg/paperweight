@@ -24,8 +24,7 @@ the browser at runtime.
 | --- | --- | --- |
 | arrow keys / WASD | drag anywhere | walk |
 | Z / Enter / Space | tap | talk, confirm |
-| X / Esc | two-finger tap | back, cancel |
-| C / Shift | three-finger tap | open your pockets |
+| X / Esc / C / Shift | two-finger tap | back — and, out in a room, your pockets |
 | F | button, bottom right | fullscreen |
 | M | — | sound on/off |
 
@@ -35,6 +34,12 @@ also just **tap the thing you want** — a menu option, a save slot, a tab, or t
 creature you mean to hit — and it is chosen outright, with no swiping to it
 first. Tapping past a menu does nothing rather than confirming whatever happened
 to be highlighted. The on-screen help changes to match whichever you are using.
+
+**Back and pocket are one button.** Out in a room there is nothing to go back
+to, so it opens your pockets; in a menu there is nowhere further in, so it
+closes them. Two ways of saying the same thing was only ever a way to press the
+wrong one — and on a phone it meant the easiest gesture you have did nothing at
+all for most of the game.
 
 The game saves to three slots in `localStorage`, and writes automatically at
 each chapter break and whenever you sit down on the rug in the Hall of Doors.
@@ -216,9 +221,9 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 ```
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
-node tools/paths.js           # 64 checks: endings, skills, items, save compatibility
-node tools/gestures.js        # 21 checks: the gesture layer, real touch events, no browser
-node tools/touch.js           # 33 checks: gestures and taps, through real touch events
+node tools/paths.js           # 66 checks: endings, skills, items, save compatibility
+node tools/gestures.js        # 26 checks: the gesture layer, real touch events, no browser
+node tools/touch.js           # 34 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 python3 tools/boxes.py        # every room's boxes drawn over its painting
 ```

@@ -34,7 +34,7 @@ PW.PocketScene.prototype = {
     if (this.confirm) { this.updateConfirm(); return; }
     if (this.pick) { this.updatePick(); return; }
 
-    if (PW.input.hit('back') || PW.input.hit('menu')) {
+    if (PW.input.hit('back')) {
       PW.audio.sfx('cancel');
       PW.game.pop();
       return;
@@ -308,7 +308,7 @@ PW.PocketScene.prototype = {
 
     var close = PW.input.touchCapable()
       ? 'two-finger tap to close   swipe for tabs'
-      : 'C or X to close   \u2190\u2192 tabs';
+      : 'X or C to close   \u2190\u2192 tabs';
     D.text(ctx, close, x + w - 34, y + h - 30, {
       size: 14, align: 'right', color: '#8c81a4', shadow: false
     });

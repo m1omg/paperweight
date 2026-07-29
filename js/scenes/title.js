@@ -185,8 +185,8 @@ PW.TitleScene.prototype = {
     ctx.save();
     ctx.globalAlpha = 0.45 * a;
     var help = PW.input.touchCapable()
-      ? 'drag to move   tap to choose   two-finger tap to go back   three fingers for your pocket'
-      : 'Z confirm   X back   arrows move   C pocket   F fullscreen   M sound';
+      ? 'drag to move   tap to choose   two-finger tap for back and for your pocket'
+      : 'Z confirm   X or C back / pocket   arrows move   F fullscreen   M sound';
     D.text(ctx, help, PW.W / 2, PW.H - 30,
       { size: 14, align: 'center', color: '#8d86a6', shadow: false });
     ctx.restore();

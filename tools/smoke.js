@@ -274,6 +274,13 @@ function fire(type, ev) {
   (docListeners[type] || []).forEach((fn) => fn(ev));
 }
 
+/** Tap a real key at the handlers input.js registered on `window`. */
+function key(code) {
+  const e = { code, repeat: false, preventDefault() {} };
+  (listeners.keydown || []).forEach((fn) => fn(e));
+  (listeners.keyup || []).forEach((fn) => fn(e));
+}
+
 function touchList(points) {
   const list = points.map((p, i) => ({
     identifier: i, clientX: p[0], clientY: p[1], target: null
@@ -320,7 +327,7 @@ function dragTo(x, y, dx, dy) {
 function dragEnd(x, y) { fire('touchend', ev([])); }
 
 module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top,
-                   fire, tapFingers, dragTo, dragEnd, settle, rawInput, downloads };
+                   fire, key, tapFingers, dragTo, dragEnd, settle, rawInput, downloads };
 
 if (require.main === module) {
   require('./smoke_run.js').main(module.exports);

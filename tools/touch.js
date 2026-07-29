@@ -337,10 +337,19 @@ function check(name, ok, detail) {
   await evaluate("while(PW.game.top().name==='battle') PW.game.pop();");
   await sleep(600);
 
-  /* ---------------------------------------------- three fingers = menu - */
+  /* ------------------------------------ two fingers, and three, = pocket - */
+
+  // X and C are one key, so out in a room the gesture that used to do nothing
+  // is the one that opens the pouch.
+  await tap(2);
+  check('two-finger tap opens the pocket',
+        (await evaluate('PW.game.top().name')) === 'pocket',
+        await evaluate('PW.game.top().name'));
+  await tap(2);
+  await sleep(200);
 
   await tap(3);
-  check('three-finger tap opens the pocket',
+  check('three-finger tap opens it too',
         (await evaluate('PW.game.top().name')) === 'pocket',
         await evaluate('PW.game.top().name'));
 

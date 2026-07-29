@@ -32,9 +32,9 @@ Hard constraints to preserve:
 
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
-node tools/paths.js            # 64 checks: endings, every skill, every item, party wipe, saves
-node tools/gestures.js         # 21 checks: the gesture layer, real touch events, no Chrome
-node tools/touch.js            # 33 checks: real touch events through headless Chrome
+node tools/paths.js            # 66 checks: endings, every skill, every item, party wipe, saves
+node tools/gestures.js         # 26 checks: the gesture layer, real touch events, no Chrome
+node tools/touch.js            # 34 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art
 python3 tools/hall.py          # repaint bg_hub with doors taken out of it
@@ -114,9 +114,17 @@ actually declare regions may call `tapped()`.
 ### Input — `js/engine/input.js`
 
 One layer. Touch gestures synthesise the same virtual actions the keyboard
-produces (`up/down/left/right/ok/back/pocket/fullscreen/mute`), so no scene knows
+produces (`up/down/left/right/ok/back/fullscreen/mute`), so no scene knows
 which is in use. Read with `held()`, `hit()` (this frame), `rep()` (menu
 auto-repeat), `axisX/axisY()`, `tap()` (game coordinates).
+
+**There is no `menu` action any more: X and C are one key, and so are two and
+three fingers.** Out in a room `back` has nothing to go back to, so
+`FieldScene` opens the pouch on it; in a menu `pocket` had nowhere further to
+go, so the pouch already closed on either. Keeping both was how a two-finger
+tap came to be the one gesture that did nothing during the part of the game
+that is mostly walking around. If you add a scene, give `back` the obvious
+meaning and don't reintroduce a second key for it.
 
 **One finger steers; two and three are gestures — and a gesture is decided on
 the way down.** The moment `g.fingers > 1`, the gesture is committed

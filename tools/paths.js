@@ -244,7 +244,14 @@ PW.save.reset();
 PW.state.chapter=2; PW.items.give('jam');
 PW.game.start(new PW.FieldScene('kitchen','start'));
 until(()=>top().name==='field'&&!top().script.running,'ok',600);
-tick('menu'); run(2);
+/* X and C are one key. Out in a room there is nothing to go back to, so back
+   is what opens the pouch — which is what makes a two-finger tap worth having,
+   since out here it was the one gesture that did nothing at all. */
+tick('back'); run(2);
+ck('back opens the pouch out in a room', top().name==='pocket', top().name);
+tick('back'); run(2);
+ck('and back again closes it', top().name==='field', top().name);
+tick('back'); run(2);
 ck('the pouch has a save tab', top().name==='pocket' &&
    PW.PocketScene.TABS[3]==='save', PW.PocketScene.TABS.join(', '));
 const saveTab = top();

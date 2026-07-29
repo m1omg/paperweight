@@ -423,7 +423,7 @@ exports.main = function (H) {
   run(6);
   until(() => idle(), 'ok', 1500);
   run(6);
-  tick('menu'); run(8);
+  tick('back'); run(8);   // X and C are one key: out here it opens the pouch
   check('pocket menu opens', top().name === 'pocket');
   tick('right'); run(6);
   check('pockets tab', top().tab === 1);

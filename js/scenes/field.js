@@ -169,7 +169,8 @@ PW.FieldScene.prototype = {
     this.updateFoes(dt, false);
 
     if (PW.input.hit('ok')) this.interact();
-    if (PW.input.hit('menu')) {
+    // Nothing to go back to out here, so back is what opens the pouch.
+    if (PW.input.hit('back')) {
       PW.audio.sfx('confirm');
       PW.game.push(new PW.PocketScene());
     }
