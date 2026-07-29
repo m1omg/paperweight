@@ -14,7 +14,7 @@
  *   node tools/gestures.js
  */
 const H = require('./smoke.js');
-const {PW, fire, rawInput, tapFingers} = H;
+const {PW, fire, rawInput, tapFingers, settle} = H;
 const R = rawInput;
 let pass=0, fail=0;
 const ck=(n,ok,d)=>{ ok?pass++:fail++; console.log((ok?'  ok   ':'  FAIL ')+n+(d?'  — '+d:'')); };
@@ -55,7 +55,71 @@ fire('touchstart', T([[400,300]]));
 fire('touchstart', T([[400,300],[460,300],[520,300]]));
 fire('touchmove',  T([[430,340],[460,300],[520,300]]));
 fire('touchend',   T([]));
+settle();
 ck('a three-finger tap survives a roll too', R.hit('menu'));
+
+/* Everything below is a two-finger tap that the old release-time rules threw
+   away. A gesture is decided when the fingers land, so none of it can. */
+
+// held far too long to have been a tap, by the old rules
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', T([[400,300],[460,300]]));
+settle();
+const slow = R.hit('back');
+settle(); settle();                         // ...and the fingers stay down...
+fire('touchend',   T([]));
+settle();
+ck('back fires while the fingers are down, however long they stay there',
+   slow && !R.hit('back'), 'fired='+slow+'  again on release='+R.hit('back'));
+
+// the first finger wandering before the second one lands
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchmove',  T([[400,260]]));         // 40px — a drag, by the old rules
+fire('touchstart', T([[400,260],[460,260]]));
+fire('touchend',   T([]));
+settle();
+ck('a two-finger tap after the first finger wandered still means back',
+   R.hit('back') && !R.held('up'), 'back='+R.hit('back')+' up='+R.held('up'));
+
+// the browser taking the gesture away after the hand was already down
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', T([[400,300],[460,300]]));
+fire('touchcancel', T([]));
+settle();
+ck('a cancelled two-finger tap still lands', R.hit('back'), 'back='+R.hit('back'));
+
+// fingers that lift raggedly, one long after the other
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', T([[400,300],[460,300]]));
+fire('touchend',   T([[460,300]]));
+settle();
+fire('touchend',   T([]));
+ck('back does not wait for the second finger to lift', R.hit('back'));
+
+// and it must not fire twice for one hand
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', T([[400,300],[460,300]]));
+fire('touchend',   T([]));
+settle();
+const once = R.hit('back');
+settle();
+ck('and it fires exactly once', once && !R.hit('back') && !R.hit('ok'),
+   'again='+R.hit('back')+' ok='+R.hit('ok'));
+
+// a third finger arriving a moment late is still a third finger
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', T([[400,300],[460,300]]));
+fire('touchstart', T([[400,300],[460,300],[520,300]]));
+fire('touchend',   T([]));
+settle();
+ck('a hand that lands raggedly is still three fingers',
+   R.hit('menu') && !R.hit('back'), 'menu='+R.hit('menu')+' back='+R.hit('back'));
 
 // a one-finger tap still reports where it landed
 reset(); tapFingers(1, 312, 244);
@@ -84,6 +148,7 @@ fire('touchstart', T([[400,300]]));
 fire('touchstart', onUI([[400,300],[900,500]]));
 fire('touchend',   T([[900,500]]));
 fire('touchend',   T([]));
+settle();
 ck('a finger on the fullscreen button still counts',
    R.hit('back') && !R.hit('ok'), 'back='+R.hit('back')+' ok='+R.hit('ok'));
 

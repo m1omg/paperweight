@@ -82,8 +82,10 @@ PW.input = (function () {
   var STICK = 62;      // the origin trails the finger at this distance
   var TAP_MS = 500;    // longer than this and it is not a tap either
   var DIAG = 0.38;     // how much of the vector an axis needs to count
+  var GRACE = 0.08;    // seconds to let the rest of the hand land
 
   var g = null;        // the gesture in progress
+  var multi = null;    // a two/three-finger gesture, already decided
   var touched = false; // has this device ever been touched at all?
   var tapAt = null;    // where a tap landed this frame, in game coordinates
   var screen = null;
@@ -168,9 +170,21 @@ PW.input = (function () {
     // The most fingers down at any point decides what a tap means.
     var one = g.fingers <= 1;
     g.fingers = Math.max(g.fingers, e.touches.length);
+    if (g.fingers <= 1) return;
+
     // A second finger turns the thumbstick into a gesture. Let go of whatever
     // direction the first finger was holding, or she walks on through it.
-    if (g.fingers > 1 && one) steer(0, 0);
+    if (one) steer(0, 0);
+
+    /* Two fingers down is never anything but a gesture, so it happens *now*,
+       on the way down, and nothing that comes after can take it away. Waiting
+       for the release meant asking a question of every two-finger tap — did it
+       travel, did it take too long — that a one-finger tap has to be asked and
+       a gesture never did, and the answer came back wrong often enough on real
+       hardware that two-finger back was simply gone. There is nothing a second
+       finger could have meant instead. */
+    g.spent = true;
+    multi = { n: Math.min(g.fingers, 3), t: 0 };
   }
 
   function onTouchMove(e) {
@@ -206,16 +220,19 @@ PW.input = (function () {
     if (!overUI(e)) e.preventDefault();
     if (e.touches.length > 0) return;      // wait for every finger to lift
 
-    if (!g.moved && now() - g.t0 < TAP_MS) {
-      var n = Math.min(g.fingers, 3);
-      vtap(TAP_KEY[n] || 'ok');
-      // Only a single finger aims at something; two and three are gestures.
-      if (n === 1) tapAt = toGame(g.ox, g.oy);
+    // One finger has to earn its tap: it might have been a drag. A gesture has
+    // already fired on the way down and owes nothing here.
+    if (!g.spent && !g.moved && now() - g.t0 < TAP_MS) {
+      vtap('ok');
+      tapAt = toGame(g.ox, g.oy);
     }
     steer(0, 0);
     g = null;
   }
 
+  /* A cancelled gesture releases the thumbstick, but a two-finger tap that has
+     already been decided still lands — the fingers were down, and whatever the
+     browser did afterwards is not the player changing their mind. */
   function onTouchCancel() {
     if (g) { steer(0, 0); g = null; }
   }
@@ -278,6 +295,19 @@ PW.input = (function () {
       pressed = {};
       released = {};
       tapAt = null;
+
+      /* The gesture was decided when the fingers landed; this only waits long
+         enough for the rest of the hand to arrive, so that a third finger is
+         still a third finger and not a slow second one. It fires *after* the
+         frame has been cleared, so the edge is there to be read next frame
+         instead of being wiped the moment it is made. */
+      if (multi) {
+        multi.t += dt;
+        if (multi.t >= GRACE) {
+          vtap(TAP_KEY[multi.n] || 'ok');
+          multi = null;
+        }
+      }
     },
 
     /** Drop any queued edges — used when scenes swap so a keypress isn't eaten twice. */

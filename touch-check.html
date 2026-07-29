@@ -61,7 +61,7 @@
    you, the fault is above the gesture layer, not in it. */
 var DEAD = 20, TAP_MS = 500;
 
-var g = null, lines = [], cancels = 0;
+var g = null, lines = [], cancels = 0, graceTimer = 0;
 var pad = document.getElementById('pad');
 var elVerdict = document.getElementById('verdict');
 var elLive = document.getElementById('live');
@@ -87,12 +87,25 @@ function onStart(e){
   if (!g) {
     var t = e.changedTouches[0];
     g = { id: t.identifier, ox: t.clientX, oy: t.clientY, t0: now(),
-          moved: false, fingers: 0, drift: 0, cancelled: false };
+          moved: false, fingers: 0, drift: 0, cancelled: false, spent: false };
   }
   g.fingers = Math.max(g.fingers, e.touches.length);
   log('start  touches=' + e.touches.length + '  changed=' + e.changedTouches.length +
       '  max=' + g.fingers);
+  // Two fingers down is never anything but a gesture: it fires here, on the
+  // way down, and nothing after this can take it away.
+  if (g.fingers > 1) { g.spent = true; clearTimeout(graceTimer); graceTimer = setTimeout(fireMulti, 80); }
   live();
+}
+
+function fireMulti(){
+  if (!g) return;
+  var n = Math.min(g.fingers, 3);
+  var key = { 2:'back (X)', 3:'pockets (C)' }[n];
+  log('FIRE   ' + n + ' fingers  ->  ' + key + '   (on the way down, ' +
+      (now() - g.t0).toFixed(0) + 'ms in)');
+  elVerdict.className = 'good';
+  elVerdict.textContent = n + ' fingers  →  ' + key;
 }
 
 function onMove(e){
@@ -115,19 +128,21 @@ function onEnd(e){
   if (e.touches.length > 0) { log('end    touches left=' + e.touches.length + ' (waiting)'); return; }
 
   var ms = now() - g.t0;
-  var n = Math.min(g.fingers, 3);
-  var key = { 1:'ok (Z)', 2:'back (X)', 3:'pockets (C)' }[n] || 'ok (Z)';
-  var ok = !g.moved && ms < TAP_MS;
-
   log('END    fingers=' + g.fingers + '  drift=' + g.drift.toFixed(0) + 'px  ' +
       ms.toFixed(0) + 'ms  moved=' + g.moved + (g.cancelled ? '  CANCELLED' : ''));
 
-  elVerdict.className = ok ? 'good' : 'bad';
-  elVerdict.textContent = ok
-    ? n + ' finger' + (n>1?'s':'') + '  →  ' + key
-    : n + ' finger' + (n>1?'s':'') + '  →  NOTHING (' +
-      (g.moved ? 'read as a drag, drift ' + g.drift.toFixed(0) + 'px'
-               : 'too slow, ' + ms.toFixed(0) + 'ms') + ')';
+  // A gesture already fired on the way down. Only a single finger has to earn
+  // its tap here, because only a single finger might have been a drag.
+  if (g.spent) { if (graceTimer) { clearTimeout(graceTimer); fireMulti(); graceTimer = 0; } }
+  else {
+    var ok = !g.moved && ms < TAP_MS;
+    elVerdict.className = ok ? 'good' : 'bad';
+    elVerdict.textContent = ok
+      ? '1 finger  →  ok (Z)'
+      : '1 finger  →  NOTHING (' +
+        (g.moved ? 'read as a drag, drift ' + g.drift.toFixed(0) + 'px'
+                 : 'too slow, ' + ms.toFixed(0) + 'ms') + ')';
+  }
   g = null;
   live();
 }
@@ -136,8 +151,12 @@ function onCancel(e){
   cancels++;
   log('CANCEL touches=' + (e.touches ? e.touches.length : '?') +
       '   <- the browser took the gesture away  (total ' + cancels + ')');
-  elVerdict.className = 'bad';
-  elVerdict.textContent = 'the browser CANCELLED it';
+  // Cancelled or not, a gesture that was already decided still lands.
+  if (g && g.spent) { clearTimeout(graceTimer); graceTimer = 0; fireMulti(); }
+  else {
+    elVerdict.className = 'bad';
+    elVerdict.textContent = 'the browser CANCELLED it';
+  }
   g = null;
   live();
 }

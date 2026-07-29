@@ -33,7 +33,7 @@ Hard constraints to preserve:
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
 node tools/paths.js            # 64 checks: endings, every skill, every item, party wipe, saves
-node tools/gestures.js         # 15 checks: the gesture layer, real touch events, no Chrome
+node tools/gestures.js         # 21 checks: the gesture layer, real touch events, no Chrome
 node tools/touch.js            # 33 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art
@@ -118,15 +118,30 @@ produces (`up/down/left/right/ok/back/pocket/fullscreen/mute`), so no scene know
 which is in use. Read with `held()`, `hit()` (this frame), `rep()` (menu
 auto-repeat), `axisX/axisY()`, `tap()` (game coordinates).
 
-**One finger steers; two and three are gestures.** A drag is a thumbstick, so it
-tracks the first finger and cancels itself past `DEAD` (20px) — but a hand makes
-a multi-finger tap by *rolling*, and that drift used to mark the gesture as a
-drag and throw the tap away, which is how two-finger back silently died on real
-hardware. Once `g.fingers > 1`, `onTouchMove` returns without steering or
-setting `moved`, and the second finger releases whatever direction the first was
-holding. Nothing here can be tested with still fingers: `tools/gestures.js`
-fires real events with a roll in them, and reads `rawInput` because `smoke.js`
-replaces `PW.input`'s readers with a scripted `keys` object for every other test.
+**One finger steers; two and three are gestures — and a gesture is decided on
+the way down.** The moment `g.fingers > 1`, the gesture is committed
+(`g.spent`), and `endFrame` fires it after `GRACE` (80ms, just long enough that
+a third finger landing late is still a third finger and not a slow second one).
+Nothing afterwards can take it back: not drift, not duration, not `touchcancel`,
+not the fingers lifting raggedly.
+
+That is the whole design, and it is a correction. Gestures used to resolve on
+release, like a one-finger tap does, which meant asking every two-finger tap
+whether it had travelled past `DEAD` (20px, about 2mm) or outstayed `TAP_MS` —
+questions a one-finger tap *has* to be asked, because it might have been a drag,
+and a two-finger tap never did, because there is nothing else a second finger
+could mean. On real hardware the answer came back wrong often enough that
+two-finger back was simply gone, and two rounds of narrowing those conditions
+did not fix it. Only a single finger earns its tap in `onTouchEnd` now.
+
+`endFrame` fires the gesture *after* clearing `pressed`, so the edge is there to
+read next frame instead of being wiped the moment it is made — which is why
+`tools/smoke.js` exports `settle()` and every multi-finger check calls it.
+
+Nothing here can be tested with still fingers: `tools/gestures.js` fires real
+events with rolls, late fingers, cancels and ragged lifts in them, and reads
+`rawInput` because `smoke.js` replaces `PW.input`'s readers with a scripted
+`keys` object for every other test.
 
 ### State and saving — `js/engine/save.js`
 

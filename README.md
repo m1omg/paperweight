@@ -217,7 +217,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
 node tools/paths.js           # 64 checks: endings, skills, items, save compatibility
-node tools/gestures.js        # 15 checks: the gesture layer, real touch events, no browser
+node tools/gestures.js        # 21 checks: the gesture layer, real touch events, no browser
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 python3 tools/boxes.py        # every room's boxes drawn over its painting
@@ -248,9 +248,12 @@ is awake.
 
 `gestures.js` needs no browser at all: it fires real touchstart/move/end
 sequences at the handlers the input layer registered and reads the true input
-state. It exists for a bug no still-fingered test could catch — a hand makes a
-two-finger tap by rolling slightly, and that drift used to be read as a drag,
-which threw the tap away. One finger steers; two and three no longer can.
+state. It exists for a class of bug no still-fingered test could catch. A
+gesture is now decided the moment the second finger lands, so the checks are
+all the ways a real hand fails to be tidy: a hand that rolls, a finger that
+wandered first, fingers that lift raggedly, a third finger arriving late, and
+the browser cancelling the whole thing halfway through. None of them can lose
+the tap any more.
 
 `touch.js` turns on Chrome's touch emulation and sends genuine
 touchstart/move/end sequences: it taps with one, two and three fingers, flicks

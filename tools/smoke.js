@@ -292,6 +292,13 @@ function ev(points) {
 }
 
 /**
+ * Let a decided multi-finger gesture out. It fires on the way down, but not
+ * until the grace window has passed, so that a third finger arriving late is
+ * still a third finger — which means a frame has to go by first.
+ */
+function settle() { rawInput.endFrame.call(PW.input, 0.1); }
+
+/**
  * Tap with `n` fingers, the way a hand does it: every finger down, then every
  * finger up. One finger aims at (x, y); two and three are gestures and the
  * position is ignored, exactly as the gesture layer treats them.
@@ -301,6 +308,7 @@ function tapFingers(n, x, y) {
   for (let i = 0; i < n; i++) pts.push([(x || 480) + i * 40, (y || 270)]);
   for (let i = 1; i <= n; i++) fire('touchstart', ev(pts.slice(0, i)));
   for (let i = n - 1; i >= 0; i--) fire('touchend', ev(pts.slice(0, i)));
+  if (n > 1) settle();
 }
 
 /** Press and hold a drag from (x,y) to (x+dx, y+dy) without lifting. */
@@ -312,7 +320,7 @@ function dragTo(x, y, dx, dy) {
 function dragEnd(x, y) { fire('touchend', ev([])); }
 
 module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top,
-                   fire, tapFingers, dragTo, dragEnd, rawInput, downloads };
+                   fire, tapFingers, dragTo, dragEnd, settle, rawInput, downloads };
 
 if (require.main === module) {
   require('./smoke_run.js').main(module.exports);
