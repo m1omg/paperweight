@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>PAPERWEIGHT — touch check</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; background: #0b0a14; color: #f4ecdd;
+    touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace;
+    overflow: hidden;
+  }
+  #pad {
+    position: absolute; inset: 0; z-index: 1;
+  }
+  #ui {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    display: flex; flex-direction: column; padding: 10px; gap: 8px;
+  }
+  h1 { font-size: 15px; letter-spacing: .08em; color: #f6e7c4; font-weight: normal; }
+  .hint { color: #8d86a6; font-size: 12px; }
+  #verdict {
+    font-size: 26px; padding: 12px; border-radius: 10px; text-align: center;
+    background: rgba(20,16,32,.75); border: 1px solid rgba(185,169,205,.3);
+  }
+  #verdict.good { color: #9fe08a; border-color: rgba(159,224,138,.5); }
+  #verdict.bad  { color: #ff8f8a; border-color: rgba(255,143,138,.5); }
+  #live { background: rgba(20,16,32,.7); border-radius: 8px; padding: 8px; font-size: 13px; }
+  #live b { color: #f6e7c4; font-weight: normal; }
+  #log {
+    flex: 1; overflow: hidden; background: rgba(20,16,32,.7);
+    border-radius: 8px; padding: 8px; font-size: 12px; color: #b9a9cd;
+    white-space: pre; line-height: 1.35;
+  }
+  #env { font-size: 11px; color: #6f6885; word-break: break-all; }
+  button {
+    pointer-events: auto; font: inherit; padding: 10px; border-radius: 8px;
+    background: rgba(246,231,196,.14); color: #f6e7c4;
+    border: 1px solid rgba(246,231,196,.35);
+  }
+</style>
+</head>
+<body>
+<div id="pad"></div>
+<div id="ui">
+  <h1>PAPERWEIGHT — touch check</h1>
+  <div class="hint">Tap anywhere with <b>1</b> finger, then <b>2</b>, then <b>3</b>. Screenshot this and send it back.</div>
+  <div id="verdict">waiting for a tap</div>
+  <div id="live">nothing yet</div>
+  <div id="log"></div>
+  <div id="env"></div>
+  <button id="clear">clear</button>
+</div>
+<script>
+/* This mirrors js/engine/input.js exactly, so whatever it decides here is what
+   the game decides. If the verdict below is right but the game still ignores
+   you, the fault is above the gesture layer, not in it. */
+var DEAD = 20, TAP_MS = 500;
+
+var g = null, lines = [], cancels = 0;
+var pad = document.getElementById('pad');
+var elVerdict = document.getElementById('verdict');
+var elLive = document.getElementById('live');
+var elLog = document.getElementById('log');
+
+function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+function log(s){ lines.unshift(s); if (lines.length > 14) lines.pop(); elLog.textContent = lines.join('\n'); }
+
+function find(list, id){
+  for (var i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
+  return null;
+}
+
+function live(){
+  if (!g) { elLive.textContent = 'no gesture in progress'; return; }
+  elLive.innerHTML = 'fingers seen: <b>' + g.fingers + '</b>   drift: <b>' +
+    g.drift.toFixed(0) + 'px</b>   moved: <b>' + g.moved + '</b>   held: <b>' +
+    (now() - g.t0).toFixed(0) + 'ms</b>';
+}
+
+function onStart(e){
+  e.preventDefault();
+  if (!g) {
+    var t = e.changedTouches[0];
+    g = { id: t.identifier, ox: t.clientX, oy: t.clientY, t0: now(),
+          moved: false, fingers: 0, drift: 0, cancelled: false };
+  }
+  g.fingers = Math.max(g.fingers, e.touches.length);
+  log('start  touches=' + e.touches.length + '  changed=' + e.changedTouches.length +
+      '  max=' + g.fingers);
+  live();
+}
+
+function onMove(e){
+  if (!g) return;
+  e.preventDefault();
+  var t = find(e.touches, g.id);
+  if (!t) { log('move   (first finger is gone)'); return; }
+  var dx = t.clientX - g.ox, dy = t.clientY - g.oy;
+  var mag = Math.sqrt(dx*dx + dy*dy);
+  g.drift = Math.max(g.drift, mag);
+  // The fix: more than one finger is a gesture, not a drag.
+  if (g.fingers > 1) { live(); return; }
+  if (mag > DEAD) g.moved = true;
+  live();
+}
+
+function onEnd(e){
+  if (!g) { log('end    (no gesture — it was cancelled)'); return; }
+  e.preventDefault();
+  if (e.touches.length > 0) { log('end    touches left=' + e.touches.length + ' (waiting)'); return; }
+
+  var ms = now() - g.t0;
+  var n = Math.min(g.fingers, 3);
+  var key = { 1:'ok (Z)', 2:'back (X)', 3:'pockets (C)' }[n] || 'ok (Z)';
+  var ok = !g.moved && ms < TAP_MS;
+
+  log('END    fingers=' + g.fingers + '  drift=' + g.drift.toFixed(0) + 'px  ' +
+      ms.toFixed(0) + 'ms  moved=' + g.moved + (g.cancelled ? '  CANCELLED' : ''));
+
+  elVerdict.className = ok ? 'good' : 'bad';
+  elVerdict.textContent = ok
+    ? n + ' finger' + (n>1?'s':'') + '  →  ' + key
+    : n + ' finger' + (n>1?'s':'') + '  →  NOTHING (' +
+      (g.moved ? 'read as a drag, drift ' + g.drift.toFixed(0) + 'px'
+               : 'too slow, ' + ms.toFixed(0) + 'ms') + ')';
+  g = null;
+  live();
+}
+
+function onCancel(e){
+  cancels++;
+  log('CANCEL touches=' + (e.touches ? e.touches.length : '?') +
+      '   <- the browser took the gesture away  (total ' + cancels + ')');
+  elVerdict.className = 'bad';
+  elVerdict.textContent = 'the browser CANCELLED it';
+  g = null;
+  live();
+}
+
+var opts = { passive: false };
+document.addEventListener('touchstart', onStart, opts);
+document.addEventListener('touchmove', onMove, opts);
+document.addEventListener('touchend', onEnd, opts);
+document.addEventListener('touchcancel', onCancel, opts);
+
+document.getElementById('clear').addEventListener('click', function(ev){
+  ev.stopPropagation(); lines = []; cancels = 0; elLog.textContent = '';
+  elVerdict.className = ''; elVerdict.textContent = 'waiting for a tap';
+});
+
+document.getElementById('env').textContent =
+  'touch events: ' + ('ontouchstart' in window) +
+  '   maxTouchPoints: ' + (navigator.maxTouchPoints || 0) +
+  '   pointer: ' + (window.PointerEvent ? 'yes' : 'no') +
+  '   dpr: ' + (window.devicePixelRatio || 1) +
+  '\n' + navigator.userAgent;
+</script>
+</body>
+</html>

@@ -33,7 +33,7 @@ Hard constraints to preserve:
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
 node tools/paths.js            # 47 checks: endings, every skill, every item, party wipe, saves
-node tools/gestures.js         # 13 checks: the gesture layer, real touch events, no Chrome
+node tools/gestures.js         # 15 checks: the gesture layer, real touch events, no Chrome
 node tools/touch.js            # 33 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art

@@ -71,5 +71,28 @@ ck('walking before the second finger', R.held('up'));
 fire('touchstart', T([[400,240],[460,240]]));
 ck('a second finger stops her walking', !R.held('up'), 'up='+R.held('up'));
 
+/* The fullscreen button is 44px in the corner of a phone and only exists on
+   touch devices. A finger straying onto it must not quietly downgrade the
+   gesture — that turned *back* into *confirm*, which is worse than nothing. */
+const onUI = (pts) => ({
+  touches: pts.map((p,i)=>({identifier:i, clientX:p[0], clientY:p[1]})),
+  changedTouches: pts.map((p,i)=>({identifier:i, clientX:p[0], clientY:p[1]})),
+  target: { closest: () => ({ id: 'fs' }) }, preventDefault(){}, stopPropagation(){}
+});
+reset();
+fire('touchstart', T([[400,300]]));
+fire('touchstart', onUI([[400,300],[900,500]]));
+fire('touchend',   T([[900,500]]));
+fire('touchend',   T([]));
+ck('a finger on the fullscreen button still counts',
+   R.hit('back') && !R.hit('ok'), 'back='+R.hit('back')+' ok='+R.hit('ok'));
+
+// ...but a tap that *starts* on the button is the DOM's, not the game's.
+reset();
+fire('touchstart', onUI([[900,500]]));
+fire('touchend',   T([]));
+ck('a tap that starts on the button is left alone',
+   !R.hit('ok') && !R.hit('back'), 'ok='+R.hit('ok')+' back='+R.hit('back'));
+
 console.log('\n'+pass+'/'+(pass+fail)+' gesture checks passed');
 process.exit(fail?1:0);

@@ -207,7 +207,7 @@ missing the game still runs — `PW.assets` hands back a labelled placeholder.
 node tools/smoke.js           # 59 checks: data sanity + a full playthrough
 node tools/smoke.js --verbose # ...printing every line of dialogue
 node tools/paths.js           # 47 checks: endings, skills, items, save compatibility
-node tools/gestures.js        # 13 checks: the gesture layer, real touch events, no browser
+node tools/gestures.js        # 15 checks: the gesture layer, real touch events, no browser
 node tools/touch.js           # 33 checks: gestures and taps, through real touch events
 node tools/shots.js           # 18 real frames out of headless Chrome
 python3 tools/boxes.py        # every room's boxes drawn over its painting

@@ -147,8 +147,15 @@ PW.input = (function () {
 
   function onTouchStart(e) {
     touched = true;
-    if (overUI(e)) return;
-    e.preventDefault();
+    /* A touch that *begins* on the boot overlay or the fullscreen button
+       belongs to the DOM and the gesture layer keeps out of it. But once a
+       gesture is already under way, a second finger landing on that button is
+       still part of it — the button is 44px in the corner of a phone, and
+       without this a two-finger tap that strays onto it quietly becomes a
+       one-finger one, turning *back* into *confirm*. */
+    var ui = overUI(e);
+    if (ui && !g) return;
+    if (!ui) e.preventDefault();
 
     if (!g) {
       var t = e.changedTouches[0];
