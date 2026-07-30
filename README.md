@@ -94,6 +94,13 @@ holding whatever is in front of you until it settles — a Dustling takes one
 turn, the house at the end takes six. The game never tells you which creatures
 will allow it, and never says you should. It just keeps count.
 
+**Together.** A meter in the corner fills as you get hurt and as you hold things.
+Hitting well barely touches it; holding somebody fills it faster than anything
+else in the game. When it is full, June — and only June — can spend it: everyone
+strikes at once, for the sum of what all of them could do alone, and afterwards
+everyone is a little mended, a little braced and a little calmer. The game does
+not explain this one either. The word just goes gold.
+
 **The pouch.** Supplies are unlimited. *Kept things* — a paper crown, a spool of
 red thread, a music box that stops one note early — are not: you can carry four,
 then five. When you find something worth keeping and your hands are full, the
@@ -142,8 +149,14 @@ js/scenes/            scene (dialogue + cutscene runner) · title · field
 tools/                the asset pipeline and the tests
 assets/_raw/          the untouched GPT Image 2 output (masters)
 assets/_lossless/     full-quality PNGs of every finished asset
-assets/               83 images (15 JPEG rooms, 68 PNG cut-outs) — 7.4 MB
+assets/bg/            12 room paintings      ─┐ JPEG: opaque, so no
+assets/battlebg/       5 fight backdrops     ─┘ alpha channel to keep
+assets/chars/         36 portraits and sprites  ─┐
+assets/enemies/       11 things in the house     ├ PNG, 255 colours
+assets/ui/            21 items, icons, panels   ─┘
 ```
+
+85 images, 7.7 MB — 3.9 of paintings and 3.8 of cut-outs.
 
 **Rendering** is a single canvas. The game draws in a fixed 960×540, but that
 is a coordinate system, not a resolution: the canvas is backed by as many real
@@ -196,9 +209,15 @@ processed locally:
 
 ```
 python3 tools/gen.py                 # 38 generations, 6 concurrent codex sessions
-python3 tools/process.py             # -> the 83 images the game loads
+python3 tools/process.py             # -> the 85 images the game loads
 python3 tools/process.py --lossless  # -> assets/_lossless/, the archival copy
+python3 tools/hall.py                # repaint the hall with doors taken out
 ```
+
+`hall.py` is the odd one out: it works off the shipped `assets/` rather than the
+masters, because the two worn states of the Hall of Doors are edits of the
+finished painting — it clones wallpaper over doors the narration has just said
+are gone. `--check` writes before-and-after proofs into `shots/hall/`.
 
 `tools/manifest.py` holds the prompts. Character sheets and item sets are
 generated as labelled grids on flat magenta; `process.py` finds the white divider
@@ -207,11 +226,13 @@ rather than trusting `#FF00FF`), de-spills the fringe so nothing keeps a purple
 halo, trims and rescales. Backgrounds are cover-fitted to the screen.
 
 Room art is opaque so it ships as JPEG; anything with an alpha channel is a
-255-colour PNG, which on this soft-pencil artwork is visually identical and four
-times smaller. That takes the game from 26 MB to 4.6 MB. The originals are kept:
-`assets/_raw/` holds the untouched generations and `assets/_lossless/` holds
-full-quality PNGs of every finished asset, and both derived sets rebuild from
-`_raw` with one command.
+255-colour PNG, which on this soft-pencil artwork is visually identical and
+several times smaller than the full-quality version. That is what keeps the whole
+set to under 8 MB — small enough that the game loads off a phone's connection in
+one go, and small enough to keep in a repository without apologising for it. The
+originals are kept: `assets/_raw/` holds the untouched generations and
+`assets/_lossless/` holds full-quality PNGs of every finished asset, and both
+derived sets rebuild from `_raw` with one command.
 
 Nothing here is traced, sampled or copied from another game. If an image is
 missing the game still runs — `PW.assets` hands back a labelled placeholder.
@@ -258,7 +279,9 @@ gesture is now decided the moment the second finger lands, so the checks are
 all the ways a real hand fails to be tidy: a hand that rolls, a finger that
 wandered first, fingers that lift raggedly, a third finger arriving late, and
 the browser cancelling the whole thing halfway through. None of them can lose
-the tap any more.
+the tap any more. It also sends real keystrokes, to hold the other half of that
+fix in place: X, Esc, C and Shift all have to press the same key, and Z still
+has to be its own.
 
 `touch.js` turns on Chrome's touch emulation and sends genuine
 touchstart/move/end sequences: it taps with one, two and three fingers, flicks

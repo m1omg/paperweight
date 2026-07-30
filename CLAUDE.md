@@ -68,11 +68,27 @@ repeats it; `until(fn, key, limit)` runs until a predicate holds. Requiring
 `smoke.js` loads every game file into a fake DOM but does *not* run the
 playthrough (that lives in `tools/smoke_run.js`).
 
+Input has a second way in, because `smoke.js` replaces `PW.input`'s readers with
+a scripted `keys` object and anything testing the input layer itself has to get
+underneath that:
+
+| export | what it does |
+| --- | --- |
+| `fire(type, ev)` | dispatch a real event at the handlers `input.js` registered on `document` |
+| `key(code)` | the same for `window` keydown/keyup — `key('KeyC')` |
+| `tapFingers(n, x, y)` | a whole `n`-finger tap, fingers down then up |
+| `dragTo` / `dragEnd` | hold a drag, then let go |
+| `settle()` | let a decided multi-finger gesture out; it fires a frame later |
+| `rawInput` | the real reader set, kept before the scripted one replaced it |
+| `downloads` | everything handed to the browser as a file, `{name, href}` |
+
+`tools/gestures.js` is the worked example for all of them.
+
 ### Asset pipeline
 
 ```bash
 python3 tools/gen.py                 # regenerate raw art via the Codex GPT-Image tool
-python3 tools/process.py             # assets/_raw -> the 83 images the game loads
+python3 tools/process.py             # assets/_raw -> the 85 images the game loads
 python3 tools/process.py --lossless  # -> assets/_lossless/, the archival copy
 ```
 
@@ -251,6 +267,16 @@ look at the image**, don't guess coordinates. `smoke.js` independently asserts
 every door leads to a real room+spawn, every spawn stands on a floor, and every
 interactive object is actually reachable.
 
+That last check proves an object *can* be reached. It cannot prove the box is on
+the thing a player would walk towards, and the hall's ceiling is the standing
+example: the painting has a hatch with a folding ladder on the left (game x≈280)
+and a plain door panel on the right (x≈650), and `door_attic` is on the right
+one. The ladder is by far the more legible way up and has nothing behind it, so
+a player stands under it, faces up, gets `smalldoor`, and concludes the attic
+cannot be entered. Nearby entities make it worse — `lantern` is 330 tall and
+wins the aim contest from x≈700. When you move or add a box, look at the picture
+and ask which thing in it a player would read as the way in.
+
 Interaction (`FieldScene.nearest`) is judged from where the player stands, not a
 probe point in front of them: anything within `REACH` (96px) whose direction
 clears `AIM` (~70°) is a candidate and the most squarely-faced wins. Standing
@@ -279,6 +305,31 @@ Wick's *Say Their Name* exists to force a target TENDER so a hold lands properly
 A fight only counts as `soothed` if **every** foe settled, so mixing a kill into
 a settle silently costs the ending.
 
+**Together** (`this.together`, 0–100, drawn top-right by `drawTogether`) is the
+one meter in the game, and it fills by being hurt and by holding — never by
+hitting well:
+
+| what | gain |
+| --- | --- |
+| HOLD on a party member | 20 |
+| HOLD on a foe that has `soothe` | 14 |
+| HOLD on one that refuses | 6 |
+| a basic attack landing at a mood advantage (`r.adv > 1`) | 6 |
+| anyone on the party taking damage | `dealt / maxhp * 26` |
+
+Skills feed it nothing. At 100 a fifth option appears in the root menu — **only
+June's** (`rootOptions` gates on `m.id === 'june'`) — and `doTogether` hits every
+foe for the sum of every living member's damage roll at 0.85 power as a single
+crit, then heals the party 20% of max HP, gives each of them 12 shield, and pulls
+everyone two steps toward Steady. It empties on use and does not carry between
+fights.
+
+Two things fall out of that gating and are easy to break without noticing. If
+June is down, a full gauge is unspendable and the bar goes on saying *ready*.
+And nothing in the game explains any of this — the label turning gold is the
+whole tutorial — so changing these numbers changes a mechanic no player was ever
+told the rules of.
+
 ### Items — `js/data/items.js`
 
 `kind: 'pocket'` supplies are unlimited; `kind: 'kept'` memories are capped by
@@ -297,6 +348,16 @@ full health), and `useOutside()` applies it to the saved actor records. The
 pockets tab uses this; the kept tab offers *use it* / *put it down* when a
 memory could do both. All of it runs on `PW.party.rec()`/`stats()`, not on
 battle combatants, so nothing there may reach for `mood`, `buffs` or `alive`.
+
+### The pouch — `js/scenes/pocket.js`
+
+Four tabs: **who · pockets · kept · save**. `PW.PocketScene.TABS` is the list and
+everything counts off it, so a fifth is a `draw*` method, a branch in `activate()`
+and a case in `list()` — nothing else needs a number changed. `list()` returns
+whatever the current tab's rows are, and the row regions are all tagged `prow`,
+so tapping works the same on every tab. `confirm` is the yes/no box; give it
+`labels` for anything that is not yes/no, and `alt` for a second action (the kept
+tab uses both, for *use it* / *put it down*).
 
 ### Audio — `js/engine/audio.js`
 
