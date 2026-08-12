@@ -31,6 +31,16 @@ ck('hold + let go -> KEEP GOING', endingFor(2,1,true)==='keep_going', endingFor(
   ck('ending "'+id+'" plays through', errors.length===before, errors.slice(before)[0]);
 });
 
+// the finale hands over behind a full cream veil — the ending has to lift it
+PW.save.reset();
+PW.game.start(new PW.EndingScene('keep_going'));
+PW.game.fadeOut(0.3, '#f7ecd8');
+run(40, null);
+ck('the finale fades out before handing over', PW.game.veilAlpha() === 1, PW.game.veilAlpha());
+PW.game.replace(new PW.EndingScene('keep_going'));
+run(200, null);
+ck('and the ending lifts the veil again', PW.game.veilAlpha() === 0, PW.game.veilAlpha());
+
 // --- battle mechanics ---
 PW.save.reset();
 ['wick','dell','hal'].forEach(x=>PW.party.add(x));

@@ -108,6 +108,9 @@ PW.EndingScene = function (id) {
 PW.EndingScene.prototype = {
 
   enter: function () {
+    // The finale fades to cream and then hands over; whoever replaces a scene
+    // raises the veil again, and nothing else was going to raise this one.
+    PW.game.fadeIn(1.6);
     PW.state.endingSeen = this.id;
     PW.counter('endings_' + this.id, 1);
     PW.audio.setTension(0);
