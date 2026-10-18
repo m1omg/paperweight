@@ -207,7 +207,8 @@ PW.DialogueBox.prototype.show = function (who, expr, text, style) {
 const rawInput = {
   held: PW.input.held, hit: PW.input.hit, rep: PW.input.rep, up: PW.input.up,
   any: PW.input.any, axisX: PW.input.axisX, axisY: PW.input.axisY,
-  tap: PW.input.tap, endFrame: PW.input.endFrame, flush: PW.input.flush
+  tap: PW.input.tap, endFrame: PW.input.endFrame, flush: PW.input.flush,
+  halt: PW.input.halt
 };
 
 // Scripted input: the test presses keys by setting these.
@@ -289,33 +290,45 @@ function touchList(points) {
   return list;
 }
 
-function ev(points) {
-  return {
+/* `at` stamps the event, in ms, as a browser does; without it the gesture
+   layer reads the clock, which in a test means everything happens at once. */
+function ev(points, at) {
+  const e = {
     touches: touchList(points),
     changedTouches: touchList(points),
     target: { closest: () => null },
     preventDefault() {}, stopPropagation() {}
   };
+  if (at !== undefined) e.timeStamp = at;
+  return e;
 }
 
 /**
- * Let a decided multi-finger gesture out. It fires on the way down, but not
- * until the grace window has passed, so that a third finger arriving late is
- * still a third finger — which means a frame has to go by first.
+ * Let whatever the gesture layer is holding back out, a frame or a few later:
+ * a multi-finger gesture waits out its grace window so a late third finger is
+ * still a third finger, and a one-finger tap waits out the double-tap window
+ * to hear whether it was the first of two. Stops at the first edge, so the
+ * caller can read it.
  */
-function settle() { rawInput.endFrame.call(PW.input, 0.1); }
+function settle() {
+  for (let i = 0; i < 6; i++) {
+    rawInput.endFrame.call(PW.input, 0.1);
+    if (rawInput.any()) return;
+  }
+}
 
 /**
  * Tap with `n` fingers, the way a hand does it: every finger down, then every
  * finger up. One finger aims at (x, y); two and three are gestures and the
- * position is ignored, exactly as the gesture layer treats them.
+ * position is ignored, exactly as the gesture layer treats them. Pass
+ * `{ wait: false }` to leave a one-finger tap waiting, as the first of two.
  */
-function tapFingers(n, x, y) {
+function tapFingers(n, x, y, opt) {
   const pts = [];
   for (let i = 0; i < n; i++) pts.push([(x || 480) + i * 40, (y || 270)]);
   for (let i = 1; i <= n; i++) fire('touchstart', ev(pts.slice(0, i)));
   for (let i = n - 1; i >= 0; i--) fire('touchend', ev(pts.slice(0, i)));
-  if (n > 1) settle();
+  if (!opt || opt.wait !== false) settle();
 }
 
 /** Press and hold a drag from (x,y) to (x+dx, y+dy) without lifting. */
@@ -327,7 +340,7 @@ function dragTo(x, y, dx, dy) {
 function dragEnd(x, y) { fire('touchend', ev([])); }
 
 module.exports = { PW, tick, run, until, check, results, errors, transcript, missingArt, top,
-                   fire, key, tapFingers, dragTo, dragEnd, settle, rawInput, downloads };
+                   fire, key, ev, tapFingers, dragTo, dragEnd, settle, rawInput, downloads };
 
 if (require.main === module) {
   require('./smoke_run.js').main(module.exports);

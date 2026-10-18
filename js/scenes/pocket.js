@@ -307,7 +307,7 @@ PW.PocketScene.prototype = {
     else this.drawSave(ctx, x, y, w, h);
 
     var close = PW.input.touchCapable()
-      ? 'two-finger tap to close   swipe for tabs'
+      ? 'double tap to close   swipe for tabs'
       : 'X or C to close   \u2190\u2192 tabs';
     D.text(ctx, close, x + w - 34, y + h - 30, {
       size: 14, align: 'right', color: '#8c81a4', shadow: false

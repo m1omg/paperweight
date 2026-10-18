@@ -18,8 +18,9 @@ const http = require('http');
 const ROOT = path.dirname(__dirname);
 const TARGET = process.argv[2] || 'file://' + path.join(ROOT, 'index.html');
 const PORT = 9000 + Math.floor(Math.random() * 900);   // avoid colliding with a previous run
-const CHROME = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
-  .find((p) => fs.existsSync(p));
+const CHROME = [process.env.CHROME, '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+                '/opt/pw-browsers/chromium']
+  .find((p) => p && fs.existsSync(p));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -111,7 +112,18 @@ function check(name, ok, detail) {
     for (let i = 0; i < n; i++) await touchStart(pts.slice(0, i + 1));
     await sleep(60);
     await touchEnd();
-    await sleep(160);
+    // One finger waits out the double-tap window before it means anything.
+    await sleep(n === 1 ? 450 : 160);
+  }
+
+  /** Two quick one-finger taps in the same place. */
+  async function doubleTap(x = 450, y = 260) {
+    for (let i = 0; i < 2; i++) {
+      await touchStart([pt(x + i * 6, y + i * 4, 0)]);
+      await sleep(50);
+      await touchEnd();
+      await sleep(i ? 200 : 110);
+    }
   }
 
   /** Drag from (x,y) by (dx,dy), hold for `holdMs`, then let go. */
@@ -193,6 +205,11 @@ function check(name, ok, detail) {
   check('two-finger tap goes back', (await evaluate('PW.game.top().mode')) === 'title',
         await evaluate('PW.game.top().mode'));
 
+  await tapGame(200, 270);
+  await doubleTap();
+  check('a double tap goes back too', (await evaluate('PW.game.top().mode')) === 'title',
+        await evaluate('PW.game.top().mode'));
+
   /* ------------------------------------------------- swipe = a cursor -- */
 
   const before = await evaluate('PW.game.top().idx');
@@ -209,10 +226,11 @@ function check(name, ok, detail) {
 
   /* ------------------------------------------- tapping an option direct - */
 
-  // The title menu is 'begin' at y≈258 and 'about' at y≈304. The cursor starts
-  // on 'begin'; tapping 'about' must go straight there without any swiping.
+  // The title menu starts at y≈258, one option every 46. The cursor starts on
+  // the first; tapping 'about' must go straight there without any swiping.
   check('cursor starts on the first option', (await evaluate('PW.game.top().idx')) === 0);
-  await tapGame(200, 316);
+  const about = await evaluate("PW.game.top().opts.indexOf('about')");
+  await tapGame(200, 270 + about * 46);
   check('tapping a menu option selects it without swiping first',
         (await evaluate('PW.game.top().mode')) === 'about',
         'mode=' + await evaluate('PW.game.top().mode') +
@@ -258,6 +276,38 @@ function check(name, ok, detail) {
   await touchEnd();
   await sleep(120);
   check('a diagonal drag holds both axes', diag === '-1,-1', diag);
+
+  // That drag lifted quickly, so it was a flick and she is still going.
+  await touchStart([pt(450, 260, 0)]);
+  await sleep(40);
+  check('touching the screen stops a flick',
+        (await evaluate('PW.input.axisX() + "," + PW.input.axisY()')) === '0,0',
+        await evaluate('PW.input.axisX() + "," + PW.input.axisY()'));
+  await touchEnd();
+  await sleep(450);
+
+  /* ------------------------------------------------- a flick = a walk --- */
+
+  await evaluate(`(function(){
+    var f = PW.game.top(), s = f.room.spawns.start;
+    f.player.x = s.x; f.player.y = s.y; f.seedTrail(s.x, s.y, 'up');
+  })()`);
+  const f0 = JSON.parse(await evaluate('JSON.stringify([PW.game.top().player.x])'))[0];
+  await drag(450, 260, -120, 0);                   // a quick stroke left, and off
+  await sleep(600);
+  const f1 = JSON.parse(await evaluate('JSON.stringify([PW.game.top().player.x])'))[0];
+  check('a flick keeps her walking after the finger has gone', f1 < f0 - 60,
+        Math.round(f0) + ' -> ' + Math.round(f1));
+  check('...with nothing held down for a menu to see',
+        (await evaluate("PW.input.held('left')")) === false);
+  await touchStart([pt(450, 260, 0)]);
+  await sleep(60);
+  const f2 = JSON.parse(await evaluate('JSON.stringify([PW.game.top().player.x])'))[0];
+  await sleep(300);
+  const f3 = JSON.parse(await evaluate('JSON.stringify([PW.game.top().player.x])'))[0];
+  await touchEnd();
+  await sleep(450);
+  check('and a touch stops her where she is', f3 === f2, Math.round(f2) + ' -> ' + Math.round(f3));
 
   /* ------------------------------------------------ tapping in a battle - */
 
@@ -365,6 +415,22 @@ function check(name, ok, detail) {
   check('two-finger tap closes the pocket',
         (await evaluate('PW.game.top().name')) === 'field',
         await evaluate('PW.game.top().name'));
+  await sleep(200);
+
+  /* ------------------------------------------------ double tap = pocket - */
+
+  await doubleTap();
+  check('a double tap opens the pocket',
+        (await evaluate('PW.game.top().name')) === 'pocket',
+        await evaluate('PW.game.top().name'));
+  await sleep(200);
+  // The pouch opens on "who", with a row under the middle of the screen. The
+  // first tap of the pair must not land on it on the way to going back.
+  await doubleTap(480, 250);
+  check('a double tap closes it, picking nothing on the way',
+        (await evaluate('PW.game.top().name')) === 'field',
+        await evaluate('PW.game.top().name'));
+  await sleep(200);
 
   /* -------------------------------------------------------- page setup - */
 

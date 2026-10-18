@@ -5,13 +5,18 @@
  *
  *   keyboard             touch
  *   ------------------   ------------------------------------------
- *   arrows / WASD        drag anywhere — a thumbstick that follows your finger
- *   Z / Enter            tap with one finger
- *   X / Esc / C / Shift  tap with two fingers (or three)
+ *   arrows / WASD        swipe anywhere — she walks that way until you touch
+ *                        the screen again; hold the swipe and she follows it
+ *   Z / Enter            tap
+ *   X / Esc / C / Shift  double tap (or tap with two fingers, or three)
  *
- * A drag steers continuously while you hold it, and a quick flick moves a menu
- * cursor exactly one step, because crossing the dead zone produces a single key
- * edge and letting go produces the release.
+ * Nothing is drawn for any of it. The whole screen is the control.
+ *
+ * In a menu a swipe moves the cursor exactly one step, because crossing the
+ * dead zone produces a single key edge and letting go produces the release.
+ * Out in a room the same swipe, if it was still moving as it lifted, leaves her
+ * walking — but only through axisX/axisY, which nothing but walking reads, so
+ * no menu ever sees a key that is held by nobody.
  */
 'use strict';
 
@@ -66,6 +71,7 @@ PW.input = (function () {
       e.preventDefault();
     }
     if (e.repeat) return;
+    drift = null;
     vpress(a);
   }
 
@@ -77,7 +83,7 @@ PW.input = (function () {
 
   window.addEventListener('keydown', onDown);
   window.addEventListener('keyup', onUp);
-  window.addEventListener('blur', function () { down = {}; repeatT = {}; });
+  window.addEventListener('blur', function () { down = {}; repeatT = {}; drift = null; pend = null; });
 
   /* ------------------------------------------------------------- touch -- */
 
@@ -86,21 +92,33 @@ PW.input = (function () {
   var TAP_MS = 500;    // longer than this and it is not a tap either
   var DIAG = 0.38;     // how much of the vector an axis needs to count
   var GRACE = 0.08;    // seconds to let the rest of the hand land
+  var DOUBLE = 0.3;    // seconds a tap waits to see whether a second one follows
+  var NEAR = 70;       // px apart two taps can land and still be one double tap
+  var FLICK_MS = 400;  // a swipe shorter than this carries on after the lift...
+  var FLICK_V = 0.2;   // ...and so does one still moving this fast (px/ms) as it lifts
+  var FLICK_WIN = 100; // ms of the end of a swipe that decide how fast it was going
+  var LEAN = 0.5;      // a flick has to mean a diagonal before it gets one
 
   var g = null;        // the gesture in progress
   var multi = null;    // a two/three-finger gesture, already decided
+  var pend = null;     // a one-finger tap, waiting to hear whether it was half of two
+  var drift = null;    // the way a flick sent her, still walking after the finger left
   var touched = false; // has this device ever been touched at all?
   var tapAt = null;    // where a tap landed this frame, in game coordinates
   var screen = null;
 
   // Three fingers still work, because hands remember; they say the same thing
-  // two fingers do.
+  // two fingers do, and the same thing a double tap does.
   var TAP_KEY = { 1: 'ok', 2: 'back', 3: 'back' };
 
   function now() {
     return (typeof performance !== 'undefined' && performance.now)
       ? performance.now() : Date.now();
   }
+
+  /* When the finger actually did it, rather than when the handler got round to
+     running. Every touch timing is a difference between two of these. */
+  function stamp(e) { return (e && e.timeStamp) || now(); }
 
   /* The boot overlay and the fullscreen button are ordinary HTML sitting above
      the canvas. Touches on them must reach the DOM as normal clicks, so the
@@ -124,25 +142,33 @@ PW.input = (function () {
   }
 
   function findTouch(list, id) {
+    if (!list) return null;
     for (var i = 0; i < list.length; i++) {
       if (list[i].identifier === id) return list[i];
     }
     return null;
   }
 
-  /* Turn a stick offset into held direction keys, pressing and releasing only
-     on the transitions so menu auto-repeat behaves exactly as it does on a
-     keyboard. Diagonals hold two keys at once, which the field already sums. */
-  function steer(dx, dy) {
+  /* Which of the four keys a vector leans on. `need` is how much of it an axis
+     needs before it counts, so a bigger one keeps more of them straight. */
+  function lean(dx, dy, need) {
     var want = {};
     var mag = Math.sqrt(dx * dx + dy * dy);
     if (mag > DEAD) {
       var nx = dx / mag, ny = dy / mag;
-      if (nx > DIAG) want.right = true;
-      if (nx < -DIAG) want.left = true;
-      if (ny > DIAG) want.down = true;
-      if (ny < -DIAG) want.up = true;
+      if (nx > need) want.right = true;
+      if (nx < -need) want.left = true;
+      if (ny > need) want.down = true;
+      if (ny < -need) want.up = true;
     }
+    return want;
+  }
+
+  /* Turn a stick offset into held direction keys, pressing and releasing only
+     on the transitions so menu auto-repeat behaves exactly as it does on a
+     keyboard. Diagonals hold two keys at once, which the field already sums. */
+  function steer(dx, dy) {
+    var want = lean(dx, dy, DIAG);
     var dirs = ['up', 'down', 'left', 'right'];
     for (var i = 0; i < dirs.length; i++) {
       var d = dirs[i];
@@ -150,6 +176,54 @@ PW.input = (function () {
       else if (!want[d] && g.dirs[d]) vrelease(d);
     }
     g.dirs = want;
+  }
+
+  /* The tap that was waiting turns out to have been on its own after all: it
+     lands now, where it landed then. */
+  function land() {
+    if (!pend) return;
+    vtap('ok');
+    tapAt = pend.at;
+    pend = null;
+  }
+
+  /* One finger moving. The origin trails it, so a long drag keeps steering
+     instead of pinning itself to wherever the gesture happened to start. */
+  function follow(x, y, t) {
+    var dx = x - g.ox, dy = y - g.oy;
+    var mag = Math.sqrt(dx * dx + dy * dy);
+    if (!g.moved && Math.sqrt((x - g.sx) * (x - g.sx) + (y - g.sy) * (y - g.sy)) > DEAD) {
+      g.moved = true;
+      // Down a second time and then away: that was a walk, not a double tap,
+      // and the first tap was only ever a tap.
+      if (g.second) { g.second = false; land(); }
+    }
+    if (mag > STICK) {
+      g.ox = x - dx / mag * STICK;
+      g.oy = y - dy / mag * STICK;
+      dx = x - g.ox;
+      dy = y - g.oy;
+    }
+    g.x = x; g.y = y;
+    g.trail.push({ x: x, y: y, t: t });
+    if (g.trail.length > 24) g.trail.shift();
+    steer(dx, dy);
+  }
+
+  /* Was the finger still going when it came off the glass? A swipe that was is
+     a flick and she keeps walking; a drag that came to rest first is somebody
+     steering, and lifting it means stop. */
+  function flicked(t) {
+    if (t - g.t0 < FLICK_MS) return true;
+    var from = g.trail[0];
+    for (var i = g.trail.length - 1; i >= 0; i--) {
+      if (g.trail[i].t <= t - FLICK_WIN) { from = g.trail[i]; break; }
+    }
+    // No events arrive while a finger rests, so where it was at the start of
+    // the window is where the last event before the window left it.
+    var dx = g.x - from.x, dy = g.y - from.y;
+    var span = Math.max(1, Math.min(t - from.t, FLICK_WIN));
+    return Math.sqrt(dx * dx + dy * dy) / span > FLICK_V;
   }
 
   function onTouchStart(e) {
@@ -166,11 +240,22 @@ PW.input = (function () {
 
     if (!g) {
       var t = e.changedTouches[0];
+      // A finger on the glass is how you stop her, wherever it lands.
+      drift = null;
       g = {
         id: t.identifier,
+        sx: t.clientX, sy: t.clientY,
         ox: t.clientX, oy: t.clientY,
-        t0: now(), moved: false, fingers: 0, dirs: {}
+        x: t.clientX, y: t.clientY,
+        t0: stamp(e), moved: false, fingers: 0, dirs: {}, second: false,
+        trail: [{ x: t.clientX, y: t.clientY, t: stamp(e) }]
       };
+      // Close to a tap that is still waiting: this may be the other half of it.
+      if (pend) {
+        var px = t.clientX - pend.x, py = t.clientY - pend.y;
+        if (Math.sqrt(px * px + py * py) <= NEAR) g.second = true;
+        else land();
+      }
     }
     // The most fingers down at any point decides what a tap means.
     var one = g.fingers <= 1;
@@ -178,8 +263,10 @@ PW.input = (function () {
     if (g.fingers <= 1) return;
 
     // A second finger turns the thumbstick into a gesture. Let go of whatever
-    // direction the first finger was holding, or she walks on through it.
+    // direction the first finger was holding, or she walks on through it. A
+    // tap still waiting was a tap of its own and goes first.
     if (one) steer(0, 0);
+    if (g.second) { g.second = false; land(); }
 
     /* Two fingers down is never anything but a gesture, so it happens *now*,
        on the way down, and nothing that comes after can take it away. Waiting
@@ -203,33 +290,47 @@ PW.input = (function () {
     if (g.fingers > 1) return;
 
     var t = findTouch(e.touches, g.id);
-    if (!t) return;
-
-    var dx = t.clientX - g.ox, dy = t.clientY - g.oy;
-    var mag = Math.sqrt(dx * dx + dy * dy);
-    if (mag > DEAD) g.moved = true;
-
-    // Let the origin trail the finger, so a long drag keeps steering instead
-    // of pinning itself to wherever the gesture happened to start.
-    if (mag > STICK) {
-      g.ox = t.clientX - dx / mag * STICK;
-      g.oy = t.clientY - dy / mag * STICK;
-      dx = t.clientX - g.ox;
-      dy = t.clientY - g.oy;
-    }
-    steer(dx, dy);
+    if (t) follow(t.clientX, t.clientY, stamp(e));
   }
 
   function onTouchEnd(e) {
     if (!g) return;
     if (!overUI(e)) e.preventDefault();
+
+    // A quick flick can be over before a single move event arrives, so where
+    // the finger came off counts as a move of its own.
+    var t = g.fingers <= 1 && findTouch(e.changedTouches, g.id);
+    if (t) follow(t.clientX, t.clientY, stamp(e));
+
     if (e.touches.length > 0) return;      // wait for every finger to lift
 
     // One finger has to earn its tap: it might have been a drag. A gesture has
     // already fired on the way down and owes nothing here.
-    if (!g.spent && !g.moved && now() - g.t0 < TAP_MS) {
-      vtap('ok');
-      tapAt = toGame(g.ox, g.oy);
+    var tap = !g.spent && !g.moved && stamp(e) - g.t0 < TAP_MS;
+
+    if (tap && g.second && pend) {
+      // The second of two quick taps in one place. The first never lands: a
+      // double tap is back, and back alone.
+      pend = null;
+      vtap('back');
+    } else {
+      if (g.second) land();
+      /* A tap waits a moment before it means ok, in case a second one is on
+         its way. It has to: the first half of a double tap is otherwise a
+         confirm, and in a menu that picks whatever is under the finger on the
+         way to going back. */
+      if (tap) pend = { x: g.sx, y: g.sy, at: toGame(g.sx, g.sy), t: 0 };
+
+      /* A swipe that was still going when it lifted keeps her walking that
+         way, so crossing a room is one stroke and not a thumb held down the
+         whole way. Only the field reads it: menus see the same swipe as one
+         step of the cursor, exactly as before. */
+      if (!g.spent && g.moved && flicked(stamp(e))) {
+        var w = lean(g.x - g.ox, g.y - g.oy, LEAN);
+        var dx = (w.right ? 1 : 0) - (w.left ? 1 : 0);
+        var dy = (w.down ? 1 : 0) - (w.up ? 1 : 0);
+        if (dx || dy) drift = { x: dx, y: dy };
+      }
     }
     steer(0, 0);
     g = null;
@@ -239,7 +340,11 @@ PW.input = (function () {
      already been decided still lands — the fingers were down, and whatever the
      browser did afterwards is not the player changing their mind. */
   function onTouchCancel() {
-    if (g) { steer(0, 0); g = null; }
+    if (g) {
+      if (g.second) land();
+      steer(0, 0);
+      g = null;
+    }
   }
 
   if (typeof document !== 'undefined' && document.addEventListener) {
@@ -248,6 +353,11 @@ PW.input = (function () {
     document.addEventListener('touchmove', onTouchMove, opts);
     document.addEventListener('touchend', onTouchEnd, opts);
     document.addEventListener('touchcancel', onTouchCancel, opts);
+  }
+
+  /* A flick only steers while nothing else is; any held direction wins. */
+  function coasting() {
+    return !!drift && !down.up && !down.down && !down.left && !down.right;
   }
 
   /* ---------------------------------------------------------------- api -- */
@@ -270,9 +380,20 @@ PW.input = (function () {
       return false;
     },
 
-    /** -1 / 0 / +1 movement axes from held keys. */
-    axisX: function () { return (down.right ? 1 : 0) - (down.left ? 1 : 0); },
-    axisY: function () { return (down.down ? 1 : 0) - (down.up ? 1 : 0); },
+    /** -1 / 0 / +1 movement axes from held keys, or from a flick still
+     *  carrying her along once nothing is held. Only walking reads these. */
+    axisX: function () {
+      if (coasting()) return drift.x;
+      return (down.right ? 1 : 0) - (down.left ? 1 : 0);
+    },
+    axisY: function () {
+      if (coasting()) return drift.y;
+      return (down.down ? 1 : 0) - (down.up ? 1 : 0);
+    },
+
+    /** Stop whatever a flick set going. The field calls this when she walks
+     *  into something, or when anything but walking is happening. */
+    halt: function () { drift = null; },
 
     /** Where a one-finger tap landed this frame, in game coordinates. */
     tap: function () { return tapAt; },
@@ -313,9 +434,23 @@ PW.input = (function () {
           multi = null;
         }
       }
+
+      /* Likewise a tap nobody followed up: it lands once the window for a
+         second one has closed. While a second finger is down nearby the window
+         stays open — it is up to that finger now. */
+      if (pend && !(g && g.second)) {
+        pend.t += dt;
+        if (pend.t >= DOUBLE) land();
+      }
     },
 
-    /** Drop any queued edges — used when scenes swap so a keypress isn't eaten twice. */
-    flush: function () { pressed = {}; released = {}; tapAt = null; }
+    /** Drop any queued edges — used when scenes swap so a keypress isn't eaten
+     *  twice. A tap still waiting, and a flick still walking, belonged to the
+     *  scene that was there when they were made. */
+    flush: function () {
+      pressed = {}; released = {}; tapAt = null;
+      pend = null; drift = null;
+      if (g) g.second = false;
+    }
   };
 })();

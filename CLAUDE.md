@@ -32,18 +32,19 @@ Hard constraints to preserve:
 
 node tools/smoke.js            # 59 checks: data sanity + a full scripted playthrough
 node tools/smoke.js --verbose  # ...printing every line of dialogue
-node tools/paths.js            # 66 checks: endings, every skill, every item, party wipe, saves
-node tools/gestures.js         # 26 checks: the gesture layer, real touch events, no Chrome
-node tools/touch.js            # 34 checks: real touch events through headless Chrome
+node tools/paths.js            # 68 checks: endings, every skill, every item, party wipe, saves
+node tools/gestures.js         # 60 checks: the gesture layer, real touch events, no Chrome
+node tools/touch.js            # 41 checks: real touch events through headless Chrome
 node tools/shots.js [outdir]   # 18 real frames out of headless Chrome -> shots/
 python3 tools/boxes.py [room]  # draw each room's boxes/floor/spawns over its art
 python3 tools/hall.py          # repaint bg_hub with doors taken out of it
 ```
 
 `smoke.js` and `paths.js` are the everyday tests and run in ~3s each with no
-setup. `touch.js` and `shots.js` need a Chrome binary at
-`/usr/bin/google-chrome-stable`, `/usr/bin/chromium` or `/usr/bin/chromium-browser`
-— **not installed in this environment**, so they will exit with "no chrome found".
+setup. `touch.js` and `shots.js` need a Chrome binary: `$CHROME` if set, else
+`/usr/bin/google-chrome-stable`, `/usr/bin/chromium`, `/usr/bin/chromium-browser`
+or Playwright's `/opt/pw-browsers/chromium`, which is the one this environment
+has. Without any of them they exit with "no chrome found".
 `boxes.py` needs Pillow (present) and writes to `shots/boxes/`. `hall.py` needs
 Pillow too, and unlike the rest of the art pipeline it works off the shipped
 `assets/`, so it does run in this checkout; `--check` writes before/after proofs
@@ -76,9 +77,10 @@ underneath that:
 | --- | --- |
 | `fire(type, ev)` | dispatch a real event at the handlers `input.js` registered on `document` |
 | `key(code)` | the same for `window` keydown/keyup — `key('KeyC')` |
-| `tapFingers(n, x, y)` | a whole `n`-finger tap, fingers down then up |
+| `ev(points, at)` | a touch event; `at` stamps it in ms, for anything about speed or stillness |
+| `tapFingers(n, x, y, opt)` | a whole `n`-finger tap, fingers down then up, settled; `{wait: false}` leaves a one-finger tap waiting |
 | `dragTo` / `dragEnd` | hold a drag, then let go |
-| `settle()` | let a decided multi-finger gesture out; it fires a frame later |
+| `settle()` | let out whatever is held back — a multi-finger gesture's grace, a tap's double-tap window — stopping at the first edge |
 | `rawInput` | the real reader set, kept before the scripted one replaced it |
 | `downloads` | everything handed to the browser as a file, `{name, href}` |
 
@@ -134,8 +136,12 @@ produces (`up/down/left/right/ok/back/fullscreen/mute`), so no scene knows
 which is in use. Read with `held()`, `hit()` (this frame), `rep()` (menu
 auto-repeat), `axisX/axisY()`, `tap()` (game coordinates).
 
-**There is no `menu` action any more: X and C are one key, and so are two and
-three fingers.** Out in a room `back` has nothing to go back to, so
+On a touchscreen: **swipe to walk, tap to confirm, double tap for `back`** (and
+two or three fingers still mean `back` too). Nothing is drawn — there is no
+on-screen pad, and there should not be one.
+
+**There is no `menu` action any more: X and C are one key, and so are double
+tap, two fingers and three.** Out in a room `back` has nothing to go back to, so
 `FieldScene` opens the pouch on it; in a menu `pocket` had nowhere further to
 go, so the pouch already closed on either. Keeping both was how a two-finger
 tap came to be the one gesture that did nothing during the part of the game
@@ -161,6 +167,32 @@ did not fix it. Only a single finger earns its tap in `onTouchEnd` now.
 `endFrame` fires the gesture *after* clearing `pressed`, so the edge is there to
 read next frame instead of being wiped the moment it is made — which is why
 `tools/smoke.js` exports `settle()` and every multi-finger check calls it.
+
+**A one-finger tap waits `DOUBLE` (0.3s) before it means `ok`**, held in `pend`,
+because the first half of a double tap would otherwise be a confirm — and in a
+menu, that picks whatever is under the finger on the way to going back. A
+second tap within `NEAR` (70px) of it while it waits makes `back` and the first
+never lands; a second touch that walks, lingers, or lands far away lets the
+first land as a tap of its own. While that second finger is down the window
+stays open. Like a gesture, a waiting tap fires from `endFrame`, so `settle()`
+is what lets it out in a test. `flush()` drops it: a tap belongs to the scene it
+was made in.
+
+The cost is that every tap is 0.3s late, and two quick taps are `back`, so
+anything a player taps through quickly has to take `back` as "go on" too: the
+dialogue box closes a line on either, so do the ending's lines, and so does
+hurrying a battle along. A
+new scene that is tapped through fast needs the same.
+
+**A swipe still moving as it lifts is a flick, and she keeps walking** (`drift`)
+until a finger touches the glass again, a key is pressed, she walks into
+something (`FieldScene` calls `PW.input.halt()`), or anything but walking is
+going on — a box, a script, a veil — which halts it too. A drag that came to rest
+before lifting is somebody steering, and lifting it stops her, as before. The
+flick lives *only* in `axisX/axisY`, which only walking reads: `held`/`hit`/`rep`
+never see it, so in a menu the same swipe is still exactly one step of the
+cursor. Whether it was a flick is judged from event `timeStamp`s, not the
+clock, so tests stamp their events (`ev(points, at)`).
 
 Nothing here can be tested with still fingers: `tools/gestures.js` fires real
 events with rolls, late fingers, cancels and ragged lifts in them, and reads

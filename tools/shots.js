@@ -16,8 +16,9 @@ const http = require('http');
 const ROOT = path.dirname(__dirname);
 const OUT = process.argv[2] || path.join(ROOT, 'shots');
 const PORT = 9000 + Math.floor(Math.random() * 900);   // avoid colliding with a previous run
-const CHROME = ['/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
-  .find((p) => fs.existsSync(p));
+const CHROME = [process.env.CHROME, '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+                '/opt/pw-browsers/chromium']
+  .find((p) => p && fs.existsSync(p));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

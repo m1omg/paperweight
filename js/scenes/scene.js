@@ -105,7 +105,10 @@ PW.DialogueBox.prototype = {
       return false;
     }
 
-    if (PW.input.hit('ok')) {
+    // Back reads on too. Two quick taps through a conversation are a double
+    // tap, and a double tap is back, so without this tapping fast is what
+    // stalls it.
+    if (PW.input.hit('ok') || PW.input.hit('back')) {
       PW.audio.sfx('cursor');
       this.close();
       return true;

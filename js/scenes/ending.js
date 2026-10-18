@@ -134,10 +134,12 @@ PW.EndingScene.prototype = {
 
     if (this.phase === 'lines') {
       var text = this.data.lines[this.line];
+      // Either key reads on, as in any conversation: two quick taps are back.
+      var on = PW.input.hit('ok') || PW.input.hit('back');
       if (this.shown < text.length) {
         this.shown += 42 * dt;
-        if (PW.input.hit('ok')) this.shown = text.length;
-      } else if (PW.input.hit('ok')) {
+        if (on) this.shown = text.length;
+      } else if (on) {
         PW.audio.sfx('cursor');
         this.line++;
         this.shown = 0;

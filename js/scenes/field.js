@@ -159,11 +159,13 @@ PW.FieldScene.prototype = {
     this.stepScripted(this.player, dt);
     for (var q = 0; q < this.entities.length; q++) this.stepScripted(this.entities[q], dt);
 
-    if (this.box.active) { this.box.update(dt); this.script.update(dt); this.updateFoes(dt, true); return; }
-    if (this.script.running) { this.script.update(dt); this.updateFoes(dt, true); return; }
-    if (PW.game.busy()) return;
+    // A flick does not carry her on through a conversation, a cutscene or a
+    // change of room: she walks while walking is what is happening.
+    if (this.box.active) { PW.input.halt(); this.box.update(dt); this.script.update(dt); this.updateFoes(dt, true); return; }
+    if (this.script.running) { PW.input.halt(); this.script.update(dt); this.updateFoes(dt, true); return; }
+    if (PW.game.busy()) { PW.input.halt(); return; }
     this.checkTrigger();
-    if (this.script.running) return;
+    if (this.script.running) { PW.input.halt(); return; }
 
     this.updatePlayer(dt);
     this.updateFoes(dt, false);
@@ -199,9 +201,12 @@ PW.FieldScene.prototype = {
       var len = Math.sqrt(ax * ax + ay * ay);
       var dx = (ax / len) * speed * dt, dy = (ay / len) * speed * dt;
 
+      var fx = p.x, fy = p.y;
       if (this.canStand(p.x + dx, p.y + dy)) { p.x += dx; p.y += dy; }
       else if (this.canStand(p.x + dx, p.y)) { p.x += dx; }
       else if (this.canStand(p.x, p.y + dy)) { p.y += dy; }
+      // Walked into something solid: a flick ends there, a held key does not.
+      if (p.x === fx && p.y === fy) PW.input.halt();
 
       // Face along whichever axis is dominant.
       if (Math.abs(ax) > Math.abs(ay)) p.dir = ax > 0 ? 'right' : 'left';

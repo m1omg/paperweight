@@ -270,7 +270,7 @@ PW.BattleScene.prototype = {
 
   updateIntro: function (dt) {
     this.phaseT -= dt;
-    if (this.phaseT <= 0 || PW.input.hit('ok')) this.beginRound();
+    if (this.phaseT <= 0 || PW.input.hit('ok') || PW.input.hit('back')) this.beginRound();
   },
 
   beginRound: function () {
@@ -540,7 +540,8 @@ PW.BattleScene.prototype = {
   updateResolve: function (dt) {
     this.phaseT -= dt;
     if (this.phaseT > 0) {
-      if (PW.input.hit('ok') && this.phaseT > 0.12) this.phaseT = 0.05;
+      // Hurrying it along is the same with either hand; two quick taps are back.
+      if ((PW.input.hit('ok') || PW.input.hit('back')) && this.phaseT > 0.12) this.phaseT = 0.05;
       return;
     }
 
